@@ -1,14 +1,18 @@
-private boolean updateUrlIfNeeded(boolean aaa, String currentUrl, String newUrl) {
-    if (aaa || currentUrl == null || currentUrl.isEmpty()) {
-        if (newUrl != null && !newUrl.trim().isEmpty()) {
-            return true;
-        }
-    }
-    return false;
+"Logging": {
+    "EnableLogging": true,
+    "LogComponents": [
+        {
+            "Id": "TRANSFORMATION",
+            "Severity": "LOGGER_SEVERITY_DETAILED_DEBUG"
+        },
+        {
+            "Id": "SOURCE_UNLOAD",
+            "Severity": "LOGGER_SEVERITY_DETAILED_DEBUG"
+        },
+        {
+            "Id": "IO",
+            "Severity": "LOGGER_SEVERITY_DETAILED_DEBUG"
+        },
+        // 其他组件根据需要
+    ]
 }
-
-// Usage
-if (updateUrlIfNeeded(, pipelineMapEntity.aaa(), extraCrMapEntity.aaa())) {
-    
-}
-
