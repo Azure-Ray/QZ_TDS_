@@ -1,16 +1,8 @@
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.session.MapSessionRepository;
-import org.springframework.session.config.annotation.web.http.EnableSpringHttpSession;
-
-import java.util.concurrent.ConcurrentHashMap;
-
-@Configuration
-@EnableSpringHttpSession
-public class SessionConfig {
-
-    @Bean
-    public MapSessionRepository sessionRepository() {
-        return new MapSessionRepository(new ConcurrentHashMap<>());
-    }
-}
+String hardcodedPublicKeyString = "YOUR HARDCODED PUBLIC KEY STRING HERE";
+        try {
+            publicKey = (RSAPublicKey) KeyFactory.getInstance("RSA")
+                        .generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(hardcodedPublicKeyString)));
+        } catch (Exception ex) {
+            Log.error("Error initializing hardcoded public key", ex.getMessage());
+            return null; // or handle this case as per your application's need
+        }
