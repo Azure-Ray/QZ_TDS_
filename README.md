@@ -1,37 +1,19 @@
-// Also adding a token to a Cookie
-                String token = generateTokenForUser(userInfo); // Implement this method to generate or obtain a token
-                ResponseCookie cookie = ResponseCookie.from("auth_token", token)
-                        .httpOnly(true)
-                        .secure(true)
-                        .path("/")
-                        .build();
-                exchange.getResponse().addCookie(cookie);
+如果你在网页的开发者工具（F12）中没有看到你设置的token在Cookie里，这可能是由于几个原因造成的。下面是一些排查和解决问题的建议：
 
-                <dependency>
-    <groupId>com.auth0</groupId>
-    <artifactId>java-jwt</artifactId>
-    <version>3.18.2</version> <!-- Use the latest version -->
-</dependency>
-import com.auth0.jwt.JWT;
-import com.auth0.jwt.algorithms.Algorithm;
-import java.util.Date;
-
-private String generateTokenForUser(UserInfo userInfo) {
-    // Token expiration time
-    long expirationTime = 1000 * 60 * 60; // 1 hour in milliseconds
-    Date expireAt = new Date(System.currentTimeMillis() + expirationTime);
-
-    // Secret key used to sign the token. In a real application, it should be complex and stored securely.
-    String secretKey = "your-secret-key";
-
-    // Generate the token
-    String token = JWT.create()
-            .withSubject(userInfo.getEmail()) // Use user email as subject
-            .withExpiresAt(expireAt)
-            .withClaim("displayName", userInfo.getDisplayName())
-            .withClaim("employeeId", userInfo.getEmployeeId())
-            .withClaim("adGroup", userInfo.getAdGroup().toString()) // Assuming getAdGroup() returns a List or similar
-            .sign(Algorithm.HMAC256(secretKey));
-
-    return token;
-}
+1. 确认响应中设置了Cookie
+确保exchange.getResponse().addCookie(cookie);这行代码确实被执行了。你可以通过在该行代码前后添加日志来确认。
+2. 检查Cookie属性
+Secure属性：如果Cookie被标记为Secure，那么只有在HTTPS协议下，Cookie才会被发送。如果你在开发环境中使用HTTP进行测试，需要移除.secure(true)设置或者确保网站使用HTTPS。
+HttpOnly属性：如果你设置了HttpOnly属性，该Cookie将不会通过客户端的脚本语言（如JavaScript）可见，但它仍然应该在开发者工具的网络请求中可见。
+Path属性：如果设置了特定的路径（如.path("/")），请确保你的请求URL与之匹配。如果路径不匹配，Cookie可能不会被设置或发送。
+Domain属性：如果你设置了Domain属性，请确保请求的域名与之匹配。如果不匹配，Cookie也可能不会被设置或发送。
+3. 检查浏览器设置
+一些浏览器配置可能阻止了Cookie的设置，特别是在隐私模式下或者浏览器设置了较高的隐私保护级别。检查浏览器的Cookie和站点数据设置，确保没有阻止设置Cookie。
+4. 检查网络请求
+在开发者工具的“网络（Network）”标签页中，找到对应的请求，查看响应头（Response Headers）。搜索Set-Cookie头来确认服务器是否试图设置Cookie。如果没有找到，说明服务器端没有正确发送设置Cookie的响应头。
+5. 跨域请求
+如果你的前端和后端跨域（即，它们的域名、端口号或协议不完全相同），并且你的请求是一个跨域请求，确保响应中包含了正确的CORS（跨源资源共享）头，允许Cookie被发送。特别是Access-Control-Allow-Credentials头需要被设置为true，并且Access-Control-Allow-Origin不能是*，它必须指定为请求的具体来源域。
+解决步骤
+简化测试：尝试创建一个简单的响应拦截器，只在响应中添加一个测试Cookie，看看是否能在浏览器中看到。这可以帮助确定问题是否出在设置Cookie的逻辑上。
+日志和调试：增加更多的日志输出，在设置Cookie之前和之后打印出相关信息，以及打印出任何可能影响Cookie设置的条件判断逻辑的结果。
+如果以上建议都不能解决问题，可能需要深入检查应用的其他部分，比如前端的请求逻辑，或者进一步检查后端服务的配置和代码逻辑。
