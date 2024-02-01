@@ -127,3 +127,64 @@ openssl rsa -pubout -in private_key.pem -out public_key.pem
 这些命令生成的私钥和公钥文件应该妥善保存，特别是私钥文件，应该放在一个安全且可靠的地方。
 2048位的密钥长度通常被认为是安全的，但是你也可以选择更高的密钥长度，如4096位，来增加安全性。请注意，更长的密钥长度可能会导致更高的计算成本。
 执行这些命令后，你将得到RSA密钥对，可以用于JWT的签名和验证过程。
+
+
+
+import org.springframework.stereotype.Component;
+import javax.annotation.PostConstruct;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Base64;
+
+@Component
+public class KeyLoader {
+
+    private PrivateKey privateKey;
+
+    @PostConstruct
+    private void init() {
+        try {
+            this.privateKey = loadPrivateKey("path/to/private_key.pem");
+        } catch (Exception e) {
+            // Handle exception: log error, rethrow, etc.
+            throw new RuntimeException("Failed to load private key", e);
+        }
+    }
+
+    private PrivateKey loadPrivateKey(String filename) throws Exception {
+        String key = new String(Files.readAllBytes(Paths.get(getClass().getClassLoader().getResource(filename).toURI())));
+        
+        String privateKeyPEM = key
+            .replace("-----BEGIN PRIVATE KEY-----", "")
+            .replaceAll(System.lineSeparator(), "")
+            .replace("-----END PRIVATE KEY-----", "");
+        
+        byte[] encoded = Base64.getDecoder().decode(privateKeyPEM);
+
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(encoded);
+        return keyFactory.generatePrivate(keySpec);
+    }
+
+    public PrivateKey getPrivateKey() {
+        return this.privateKey;
+    }
+}
+import org.springframework.beans.factory.annotation.Autowired;
+
+public class TokenService {
+
+    @Autowired
+    private KeyLoader keyLoader;
+
+    public String generateToken() {
+        // ...
+        PrivateKey privateKey = keyLoader.getPrivateKey();
+        // 使用privateKey生成Token
+        // ...
+    }
+}
+
