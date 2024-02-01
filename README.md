@@ -1,19 +1,129 @@
-如果你在网页的开发者工具（F12）中没有看到你设置的token在Cookie里，这可能是由于几个原因造成的。下面是一些排查和解决问题的建议：
+步骤 1: 生成RSA公钥和私钥
+这一步骤通常在你的开发环境之外完成，使用如OpenSSL等工具。但是，为了完整性，这里是生成密钥的一个快速指南（假设你已经完成这一步并将密钥保存在了资源文件中）。
 
-1. 确认响应中设置了Cookie
-确保exchange.getResponse().addCookie(cookie);这行代码确实被执行了。你可以通过在该行代码前后添加日志来确认。
-2. 检查Cookie属性
-Secure属性：如果Cookie被标记为Secure，那么只有在HTTPS协议下，Cookie才会被发送。如果你在开发环境中使用HTTP进行测试，需要移除.secure(true)设置或者确保网站使用HTTPS。
-HttpOnly属性：如果你设置了HttpOnly属性，该Cookie将不会通过客户端的脚本语言（如JavaScript）可见，但它仍然应该在开发者工具的网络请求中可见。
-Path属性：如果设置了特定的路径（如.path("/")），请确保你的请求URL与之匹配。如果路径不匹配，Cookie可能不会被设置或发送。
-Domain属性：如果你设置了Domain属性，请确保请求的域名与之匹配。如果不匹配，Cookie也可能不会被设置或发送。
-3. 检查浏览器设置
-一些浏览器配置可能阻止了Cookie的设置，特别是在隐私模式下或者浏览器设置了较高的隐私保护级别。检查浏览器的Cookie和站点数据设置，确保没有阻止设置Cookie。
-4. 检查网络请求
-在开发者工具的“网络（Network）”标签页中，找到对应的请求，查看响应头（Response Headers）。搜索Set-Cookie头来确认服务器是否试图设置Cookie。如果没有找到，说明服务器端没有正确发送设置Cookie的响应头。
-5. 跨域请求
-如果你的前端和后端跨域（即，它们的域名、端口号或协议不完全相同），并且你的请求是一个跨域请求，确保响应中包含了正确的CORS（跨源资源共享）头，允许Cookie被发送。特别是Access-Control-Allow-Credentials头需要被设置为true，并且Access-Control-Allow-Origin不能是*，它必须指定为请求的具体来源域。
-解决步骤
-简化测试：尝试创建一个简单的响应拦截器，只在响应中添加一个测试Cookie，看看是否能在浏览器中看到。这可以帮助确定问题是否出在设置Cookie的逻辑上。
-日志和调试：增加更多的日志输出，在设置Cookie之前和之后打印出相关信息，以及打印出任何可能影响Cookie设置的条件判断逻辑的结果。
-如果以上建议都不能解决问题，可能需要深入检查应用的其他部分，比如前端的请求逻辑，或者进一步检查后端服务的配置和代码逻辑。
+步骤 2: 加载公钥和私钥
+假设你已经将公钥和私钥保存为资源文件，例如public_key.pem和private_key.pem。
+
+加载私钥（用于生成Token）
+java
+Copy code
+import com.auth0.jwt.algorithms.Algorithm;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Base64;
+
+public PrivateKey loadPrivateKey(String filename) throws Exception {
+    String key = new String(Files.readAllBytes(Paths.get(getClass().getClassLoader().getResource(filename).toURI())));
+    
+    String privateKeyPEM = key
+        .replace("-----BEGIN PRIVATE KEY-----", "")
+        .replaceAll(System.lineSeparator(), "")
+        .replace("-----END PRIVATE KEY-----", "");
+    
+    byte[] encoded = Base64.getDecoder().decode(privateKeyPEM);
+
+    KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+    PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(encoded);
+    return keyFactory.generatePrivate(keySpec);
+}
+加载公钥（用于验证Token）
+java
+Copy code
+import java.security.KeyFactory;
+import java.security.PublicKey;
+import java.security.spec.X509EncodedKeySpec;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Base64;
+
+public PublicKey loadPublicKey(String filename) throws Exception {
+    String key = new String(Files.readAllBytes(Paths.get(getClass().getClassLoader().getResource(filename).toURI())));
+    
+    String publicKeyPEM = key
+        .replace("-----BEGIN PUBLIC KEY-----", "")
+        .replaceAll(System.lineSeparator(), "")
+        .replace("-----END PUBLIC KEY-----", "");
+    
+    byte[] encoded = Base64.getDecoder().decode(publicKeyPEM);
+
+    KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+    X509EncodedKeySpec keySpec = new X509EncodedKeySpec(encoded);
+    return keyFactory.generatePublic(keySpec);
+}
+步骤 3: 生成JWT Token
+使用加载的私钥生成JWT Token。
+
+java
+Copy code
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import java.util.Date;
+
+public String generateTokenForUser(UserInfo userInfo, PrivateKey privateKey) throws Exception {
+    long expirationTime = 1000 * 60 * 60; // 1 hour in milliseconds
+    Date expireAt = new Date(System.currentTimeMillis() + expirationTime);
+
+    Algorithm algorithm = Algorithm.RSA256(null, privateKey); // 注意：公钥参数在这里不是必需的，因为签名只需要私钥
+
+    String token = JWT.create()
+            .withSubject(userInfo.getEmail())
+            .withExpiresAt(expireAt)
+            .withClaim("displayName", userInfo.getDisplayName())
+            .withClaim("employeeId", userInfo.getEmployeeId())
+            .withClaim("adGroup", userInfo.getAdGroup().toString())
+            .sign(algorithm);
+
+    return token;
+}
+步骤 4: 验证JWT Token
+使用加载的公钥验证JWT Token。
+
+java
+Copy code
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.JWTVerifier;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.interfaces.DecodedJWT;
+
+public boolean verifyToken(String token, PublicKey publicKey) {
+    try {
+        Algorithm algorithm = Algorithm.RSA256(publicKey, null); // 使用公钥验证
+        JWTVerifier verifier = JWT.require(algorithm).build(); //Reusable verifier instance
+        DecodedJWT jwt = verifier.verify(token);
+        return true; // Token验证成功
+    } catch (Exception e){
+        // Token验证失败
+        return false;
+    }
+}
+请注意，这些代码示例需要根据你的实际应用场景进行调整，特别是在处理异常和资源文件路径时。确保你的资源文件（公钥和私钥）位于src/main/resources目录下，以便于通过类加载器访问。
+
+User
+帮我写下命令生成公钥私钥一套
+ChatGPT
+生成RSA公钥和私钥的一种常见方法是使用openssl工具。以下是生成密钥对的步骤和相应的命令：
+
+生成私钥
+首先，生成一个RSA私钥：
+
+bash
+Copy code
+openssl genpkey -algorithm RSA -out private_key.pem -pkeyopt rsa_keygen_bits:2048
+这个命令将生成一个2048位的RSA私钥，并将其保存到文件private_key.pem中。
+
+生成公钥
+接下来，从私钥生成公钥：
+
+bash
+Copy code
+openssl rsa -pubout -in private_key.pem -out public_key.pem
+这个命令将读取private_key.pem文件中的私钥，并从中提取公钥，保存到public_key.pem文件中。
+
+注意事项
+确保在一个安全的环境中执行这些命令，尤其是在生成私钥时。私钥必须严格保密，任何未授权的访问都可能导致安全风险。
+这些命令生成的私钥和公钥文件应该妥善保存，特别是私钥文件，应该放在一个安全且可靠的地方。
+2048位的密钥长度通常被认为是安全的，但是你也可以选择更高的密钥长度，如4096位，来增加安全性。请注意，更长的密钥长度可能会导致更高的计算成本。
+执行这些命令后，你将得到RSA密钥对，可以用于JWT的签名和验证过程。
