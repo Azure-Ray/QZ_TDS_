@@ -1,48 +1,14 @@
-import java.security.KeyFactory;
-import java.security.interfaces.RSAPublicKey;
-import java.security.spec.X509EncodedKeySpec;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Base64;
-
 @Component
-public class KeyLoader {
+@Order(-2) // Make sure it has higher priority than WebFlux's ErrorWebExceptionHandler
+public class CustomGlobalExceptionHandler implements WebExceptionHandler {
 
-    // ...
-
-    public RSAPublicKey loadPublicKey(String filename) throws Exception {
-        String key = new String(Files.readAllBytes(Paths.get(getClass().getClassLoader().getResource(filename).toURI())));
-
-        String publicKeyPEM = key
-            .replace("-----BEGIN PUBLIC KEY-----", "")
-            .replaceAll(System.lineSeparator(), "")
-            .replace("-----END PUBLIC KEY-----", "");
-
-        byte[] encoded = Base64.getDecoder().decode(publicKeyPEM);
-
-        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-        X509EncodedKeySpec keySpec = new X509EncodedKeySpec(encoded);
-        return (RSAPublicKey) keyFactory.generatePublic(keySpec);
-    }
-}
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
-import java.security.interfaces.RSAPublicKey;
-
-@Configuration
-public class SecurityConfig {
-
-    @Autowired
-    private KeyLoader keyLoader;
-
-    @Bean
-    public JwtDecoder jwtDecoder() {
-        try {
-            RSAPublicKey publicKey = keyLoader.loadPublicKey("path/to/public_key.pem");
-            return NimbusReactiveJwtDecoder.withPublicKey(publicKey).build();
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to load public key", e);
+    @Override
+    public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
+        if (ex instanceof BadJwtException) {
+            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+            return exchange.getResponse().setComplete();
         }
+        // 对于其他异常，保持默认处理
+        return Mono.error(ex);
     }
 }
