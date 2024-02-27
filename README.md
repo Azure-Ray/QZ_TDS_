@@ -1,5 +1,23 @@
-I recently had a discussion with AWS support regarding the automatic minor version upgrades for our Aurora PostgreSQL engine. According to the confirmation received from the support team, our Aurora PostgreSQL engine operates differently from RDS in terms of version upgrades.
+import java.util.List;
+import java.util.stream.Collectors;
 
-Despite having the auto minor version upgrade feature enabled, it has been clarified that due to backend configurations controlled by the AWS team, our engine version will not automatically upgrade. Consequently, we are advised to proceed with manual updates to our DB version to stay updated.
+public class TransformationUtility {
 
-I wanted to ensure that this information is communicated and recorded for our reference and further action.
+    // 假设JsonUtils.parseObject已经可以正常工作
+    public static List<BBB> transformList(List<AAA> inputList) {
+        return inputList.stream().map(aaa -> {
+            // 解析details aa
+            aa aa = JsonUtils.parseObject(aaa.getDetails(), aa.class);
+
+            // 创建BBB对象并设置值
+            BBB bbb = new BBB();
+            bbb.setB1(aaa.getId()); // 假设AAA的id映射到BBB的b1
+            bbb.setB2(incidentDomain.getA1()); // a1映射到b2
+            bbb.setB3(incidentDomain.getA2()); // a2映射到b3
+            bbb.setB4(incidentDomain.getA3()); // a3映射到b4
+            // 注意：根据您的需求调整字段映射
+
+            return bbb;
+        }).collect(Collectors.toList());
+    }
+}
