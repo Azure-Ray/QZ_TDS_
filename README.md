@@ -1,21 +1,24 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Waiting Page</title>
-    <script>
-        function checkCookie() {
-            if (document.cookie.indexOf("auth_token=") >= 0) {
-                window.location.href = "/bulk-approval-ss0"; // 重定向回原始检查页面或最终目标页面
-            } else {
-                setTimeout(checkCookie, 1000); // 每1秒检查一次
-            }
-        }
+@GetMapping("/check-token")
+public ResponseEntity<String> checkToken(@CookieValue(name = "auth_token", required = false) String authToken) {
+    if (authToken != null && !authToken.isEmpty()) {
+        return ResponseEntity.ok("token_exists");
+    } else {
+        return ResponseEntity.ok("no_token");
+    }
+}
+<script>
+    function checkToken() {
+        fetch("/check-token")
+            .then(response => response.text())
+            .then(data => {
+                if (data === "token_exists") {
+                    window.location.href = "/your-final-destination.html"; // Token存在，重定向到最终目标
+                } else {
+                    setTimeout(checkToken, 1000); // Token不存在，等待1秒后再次检查
+                }
+            });
+    }
 
-        // 页面加载完毕时开始检查
-        window.onload = checkCookie;
-    </script>
-</head>
-<body>
-    <p>Checking your authentication status, please wait...</p>
-</body>
-</html>
+    // 页面加载完毕时开始检查
+    window.onload = checkToken;
+</script>
