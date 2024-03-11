@@ -1,19 +1,46 @@
-Health Check Journey for Aurora PostgreSQL Database Post-Rollback to Version 12.12
+import java.util.*;
 
-Rollback Confirmation: Verify the database is operational and accessible post-rollback to version 12.12.
-Connectivity Test: Execute a simple query to ensure the database responds correctly.
-Performance Metrics Review: Check critical metrics such as CPU utilization, connection counts, and disk space usage to confirm they are within normal ranges.
-Error Log Analysis: Scan the database logs for any immediate errors or warnings post-rollback.
-Application Integration Test: Run a predefined set of application operations that interact with the database to ensure application-level functionality and data integrity.
-Monitoring Setup Verification: Confirm monitoring tools and alerts are correctly configured to capture future anomalies.
-Health Check Scenario for Aurora PostgreSQL Database Post-Rollback to Version 12.12
+public class ApprovalCheckerTest {
 
-Objective: Quickly ascertain the operational status and health of the Aurora PostgreSQL database following a rollback to version 12.12.
+    public static void main(String[] args) {
+        // 模拟的changesByGroup数据
+        Map<String, List<ApprovaCrInfo>> changesByGroup = new HashMap<>();
+        changesByGroup.put("Group1", new ArrayList<>(List.of(new ApprovaCrInfo("CR1"), new ApprovaCrInfo("CR2"), new ApprovaCrInfo("CR3"))));
+        changesByGroup.put("Group2", new ArrayList<>(List.of(new ApprovaCrInfo("CR4"), new ApprovaCrInfo("CR5"))));
+        
+        // 模拟的approvedCrMap数据，假设"CR2"和"CR4"被批准
+        Map<String, List<String>> approvedCrMap = new HashMap<>();
+        approvedCrMap.put("Group1", new ArrayList<>(List.of("CR2")));
+        approvedCrMap.put("Group2", new ArrayList<>(List.of("CR4")));
 
-Steps:
+        // 移除被批准的CRs
+        approvedCrMap.forEach((group, approvedCrs) -> {
+            List<ApprovaCrInfo> crInfos = changesByGroup.get(group);
+            if (crInfos != null) {
+                crInfos.removeIf(crInfo -> approvedCrs.contains(crInfo.getSnCrNumber()));
+                if (crInfos.isEmpty()) {
+                    changesByGroup.remove(group);
+                }
+            }
+        });
 
-Connectivity: Establish a database connection and execute a 'SELECT' query.
-Performance Metrics: Verify CPU utilization is below 70%, disk usage is under 80%, and the database is operating with at least 15% free connections.
-Error Check: Review database logs for unusual error rates or critical warnings that could indicate problems.
-Functionality Test: Perform basic CRUD operations through an application interface to ensure the database interacts correctly with the application layer.
-Monitoring Check: Ensure alerting systems are active and reporting as expected, with no unresolved critical alerts.
+        // 打印最终的changesByGroup映射以查看结果
+        changesByGroup.forEach((group, crInfos) -> {
+            System.out.println("Group: " + group);
+            crInfos.forEach(crInfo -> System.out.println(" - CR: " + crInfo.getSnCrNumber()));
+        });
+    }
+
+    // 内部类来模拟ApprovaCrInfo
+    public static class ApprovaCrInfo {
+        private String snCrNumber;
+
+        public ApprovaCrInfo(String snCrNumber) {
+            this.snCrNumber = snCrNumber;
+        }
+
+        public String getSnCrNumber() {
+            return snCrNumber;
+        }
+    }
+}
