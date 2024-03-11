@@ -1,15 +1,14 @@
-    public static boolean containsSubstring(List<String> list, String target) {
-        // 针对没有"-ff"的情况，替换"ff"（如果存在），同时注意大小写
-        String normalizedTarget = normalizeString(target);
+Expected Results for Upgrading Aurora PostgreSQL from 12.12 to 12.17
 
-        // 检查列表中是否有字符串在忽略"ff"和大小写的情况下包含处理过的目标字符串
-        return list.stream().anyMatch(item ->
-                normalizeString(item).contains(normalizedTarget));
-    }
+Objective: Upgrade Aurora PostgreSQL from version 12.12 to 12.17 with minimal downtime, ensuring data integrity and no loss of connectivity.
 
-    private static String normalizeString(String input) {
-        // 替换掉" ff"或"ff"，但不替换"-ff"
-        String temp = input.replaceAll("(?i)(?<!-) ff", "").replaceAll("(?i)(?<!-)ff", "");
-        // 返回小写版本以进行不区分大小写的匹配
-        return temp.toLowerCase();
-    }
+Post-Upgrade Tests:
+
+Connectivity: Confirm all client applications can connect without issues.
+Performance Metrics:
+CPU Utilization: Below 70% during peak loads.
+Database Connections: Below 85% of the maximum limit.
+Disk Space Utilization: Under 80%.
+Read/Write Latency: Read under 10ms, Write under 15ms.
+Error Rates: Less than 0.1% for queries and transactions.
+Conclusion: Successful upgrade is indicated by meeting the above connectivity and performance metrics, ensuring the database operates efficiently and reliably at the new version without negatively impacting application performance.
