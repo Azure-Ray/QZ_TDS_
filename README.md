@@ -1,46 +1,5 @@
-import java.util.*;
+Reason for Upgrade: The current database version 12.12 is approaching its end of support by March 2024. To avoid an involuntary upgrade initiated by AWS, we must proactively upgrade to ensure continued support and service stability.
 
-public class ApprovalCheckerTest {
+Business Impact of Inaction: Failing to execute this upgrade could result in AWS enforcing an upgrade beyond our control, potentially leading to unforeseen downtime or errors that could disrupt our business operations and customer experience.
 
-    public static void main(String[] args) {
-        // 模拟的changesByGroup数据
-        Map<String, List<ApprovaCrInfo>> changesByGroup = new HashMap<>();
-        changesByGroup.put("Group1", new ArrayList<>(List.of(new ApprovaCrInfo("CR1"), new ApprovaCrInfo("CR2"), new ApprovaCrInfo("CR3"))));
-        changesByGroup.put("Group2", new ArrayList<>(List.of(new ApprovaCrInfo("CR4"), new ApprovaCrInfo("CR5"))));
-        
-        // 模拟的approvedCrMap数据，假设"CR2"和"CR4"被批准
-        Map<String, List<String>> approvedCrMap = new HashMap<>();
-        approvedCrMap.put("Group1", new ArrayList<>(List.of("CR2")));
-        approvedCrMap.put("Group2", new ArrayList<>(List.of("CR4")));
-
-        // 移除被批准的CRs
-        approvedCrMap.forEach((group, approvedCrs) -> {
-            List<ApprovaCrInfo> crInfos = changesByGroup.get(group);
-            if (crInfos != null) {
-                crInfos.removeIf(crInfo -> approvedCrs.contains(crInfo.getSnCrNumber()));
-                if (crInfos.isEmpty()) {
-                    changesByGroup.remove(group);
-                }
-            }
-        });
-
-        // 打印最终的changesByGroup映射以查看结果
-        changesByGroup.forEach((group, crInfos) -> {
-            System.out.println("Group: " + group);
-            crInfos.forEach(crInfo -> System.out.println(" - CR: " + crInfo.getSnCrNumber()));
-        });
-    }
-
-    // 内部类来模拟ApprovaCrInfo
-    public static class ApprovaCrInfo {
-        private String snCrNumber;
-
-        public ApprovaCrInfo(String snCrNumber) {
-            this.snCrNumber = snCrNumber;
-        }
-
-        public String getSnCrNumber() {
-            return snCrNumber;
-        }
-    }
-}
+Technical Impact of Inaction: Without this upgrade, our database will become unsupported. While AWS will automatically initiate an upgrade, this leaves us without control over the timing. Consequently, we may not be able to conduct timely health checks or other necessary preparations, risking service reliability and performance.
