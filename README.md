@@ -1,55 +1,43 @@
-CREATE TABLE OperationLogs (
-    ID SERIAL PRIMARY KEY,
-    EntityType VARCHAR(255),
-    EntityID VARCHAR(255),
-    OperationType VARCHAR(255),
-    Status VARCHAR(100),
-    OperationDetails TEXT,
-    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UpdatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-package com.example.demo.entity;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import javax.persistence.*;
 import java.time.LocalDateTime;
+import java.util.Iterator;
+import java.util.List;
 
-@Entity
-@Table(name = "OperationLogs")
-public class OperationLog {
+@Service
+public class OperationLogService {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Autowired
+    private OperationLogRepository operationLogRepository;
 
-    @Column(nullable = false)
-    private String entityType;
+    @Transactional
+    public void processIncidents(List<Incident> incidents, String operationType) {
+        Iterator<Incident> iterator = incidents.iterator();
+        
+        while (iterator.hasNext()) {
+            Incident incident = iterator.next();
+            // 检查该IncidentId是否已经记录过指定的操作类型
+            List<OperationLog> existingLogs = operationLogRepository.findByEntityIDAndOperationType(incident.getIncidentId(), operationType);
+            
+            if (existingLogs.isEmpty()) {
+                // 如果不存在，插入新记录
+                OperationLog newLog = new OperationLog();
+                newLog.setEntityType("Incident");
+                newLog.setEntityID(incident.getIncidentId());
+                newLog.setOperationType(operationType);
+                newLog.setStatus("Success"); // 或根据实际情况设置
+                newLog.setOperationDetails(""); // 根据需要设置详细信息
+                newLog.setCreatedAt(LocalDateTime.now());
+                newLog.setUpdatedAt(LocalDateTime.now());
+                operationLogRepository.save(newLog);
+            } else {
+                // 如果存在，从列表中移除
+                iterator.remove();
+            }
+        }
+    }
 
-    @Column(nullable = false)
-    private String entityID;
-
-    @Column(nullable = false)
-    private String operationType;
-
-    @Column(nullable = true)
-    private String status;
-
-    @Column(nullable = true, length = 10485760) // for large text
-    private String operationDetails;
-
-    @Column(nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
-
-    // Constructors, Getters and Setters
-}
-package com.example.demo.repository;
-
-import com.example.demo.entity.OperationLog;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-
-@Repository
-public interface OperationLogRepository extends JpaRepository<OperationLog, Long> {
+    // Incident类定义省略，假定其有getIncidentId方法
 }
