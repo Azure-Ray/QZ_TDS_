@@ -1,43 +1,55 @@
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+@Library('PipelineAsCodeMod')
+def globalVars.JAVA_HOME = "/opt/build tools/jdk/17.0.2"
 
-import java.time.LocalDateTime;
-import java.util.Iterator;
-import java.util.List;
+pipeline {
+    agent any
+    environment {
+        // 将你的变量放在这里
+        DISABLE_CHECKMARX = 'true'
+        DISABLE_IQ = 'true'
+        DISABLE_SONAR = 'true'
+        ENABLE_CYBERFLOWS = 'false'
+        CYBERFLOWS_CONFIG_ID = '2bkJpIdMhRQ5kudp90PxrDqEs'
+    }
+    stages {
+        stage('Check Other Job Status in Last 24 Hours') {
+            steps {
+                script {
+                    // 替换"OtherJobName"为你想检查的Job的名称
+                    def otherJob = Jenkins.instance.getItemByFullName("OtherJobName")
+                    def builds = otherJob.getBuilds()
+                    def foundSuccessfulBuild = false
+                    def twentyFourHoursAgo = new Date() - 24
 
-@Service
-public class OperationLogService {
+                    for (def build : builds) {
+                        def buildTimestamp = build.getTimestamp()
+                        def buildDate = new Date(buildTimestamp.timeInMillis)
+                        if (buildDate.after(twentyFourHoursAgo) && build.result == hudson.model.Result.SUCCESS) {
+                            foundSuccessfulBuild = true
+                            break
+                        }
+                    }
 
-    @Autowired
-    private OperationLogRepository operationLogRepository;
-
-    @Transactional
-    public void processIncidents(List<Incident> incidents, String operationType) {
-        Iterator<Incident> iterator = incidents.iterator();
-        
-        while (iterator.hasNext()) {
-            Incident incident = iterator.next();
-            // 检查该IncidentId是否已经记录过指定的操作类型
-            List<OperationLog> existingLogs = operationLogRepository.findByEntityIDAndOperationType(incident.getIncidentId(), operationType);
-            
-            if (existingLogs.isEmpty()) {
-                // 如果不存在，插入新记录
-                OperationLog newLog = new OperationLog();
-                newLog.setEntityType("Incident");
-                newLog.setEntityID(incident.getIncidentId());
-                newLog.setOperationType(operationType);
-                newLog.setStatus("Success"); // 或根据实际情况设置
-                newLog.setOperationDetails(""); // 根据需要设置详细信息
-                newLog.setCreatedAt(LocalDateTime.now());
-                newLog.setUpdatedAt(LocalDateTime.now());
-                operationLogRepository.save(newLog);
-            } else {
-                // 如果存在，从列表中移除
-                iterator.remove();
+                    if (foundSuccessfulBuild) {
+                        echo '在过去24小时内找到成功的构建，继续执行。'
+                    } else {
+                        echo '在过去24小时内没有找到成功的构建，终止执行。'
+                        // 这里我们直接结束当前构建，将其标记为成功
+                        currentBuild.result = 'SUCCESS'
+                        // 使用下面的方法可以将当前构建标记为失败
+                        // error('在过去24小时内没有找到成功的构建。')
+                    }
+                }
+            }
+        }
+        stage('Normal Build') {
+            steps {
+                script {
+                    // 在这里调用你的构建命令
+                    def commonStage = new commonBuildStage()
+                    commonStage.runCommonBuildStage(this, VAR_MVN_RELEASE_UPDATE_VERSION_STEPS)
+                }
             }
         }
     }
-
-    // Incident类定义省略，假定其有getIncidentId方法
 }
