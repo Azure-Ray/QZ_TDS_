@@ -1,74 +1,26 @@
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
-import software.amazon.awssdk.core.ResponseInputStream;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.*;
+from selenium import webdriver
+from selenium.webdriver.common.keys import Keys
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-import java.util.stream.Collectors;
+# 初始化WebDriver
+driver = webdriver.Chrome()
 
-@Service
-public class S3Service {
+# 打开登录页面
+driver.get("https://login.microsoftonline.com")
 
-    private final S3Client s3Client;
-    private final String bucketName;
+# 找到用户名输入框并输入用户名
+username_input = driver.find_element_by_id("i0116")
+username_input.send_keys("your_email@example.com")
 
-    public S3Service(@Value("${aws.s3.bucket-name}") String bucketName) {
-        this.s3Client = S3Client.builder()
-                .region(Region.of("your-region"))
-                .credentialsProvider(DefaultCredentialsProvider.create())
-                .build();
-        this.bucketName = bucketName;
-    }
+# 找到下一步按钮并点击
+next_button = driver.find_element_by_id("idSIButton9")
+next_button.click()
 
-    public List<String> listObjects() {
-        ListObjectsV2Response response = s3Client.listObjectsV2(ListObjectsV2Request.builder().bucket(bucketName).build());
-        return response.contents().stream().map(S3Object::key).collect(Collectors.toList());
-    }
+# 等待页面加载，找到密码输入框并输入密码（根据实际情况调整等待方式）
+password_input = driver.find_element_by_id("i0118")
+password_input.send_keys("your_password")
 
-    public String readObjectContent(String key) {
-        GetObjectRequest getObjectRequest = GetObjectRequest.builder().bucket(bucketName).key(key).build();
-        StringBuilder resultStringBuilder = new StringBuilder();
-        try (ResponseInputStream<GetObjectResponse> s3Object = s3Client.getObject(getObjectRequest)) {
-            new BufferedReader(new InputStreamReader(s3Object, StandardCharsets.UTF_8))
-                    .lines().forEach(resultStringBuilder::append);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return resultStringBuilder.toString();
-    }
+# 找到登录按钮并点击
+sign_in_button = driver.find_element_by_id("idSIButton9")
+sign_in_button.click()
 
-    public void uploadObject(String key, InputStream data, long size) {
-        PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                .bucket(bucketName)
-                .key(key)
-                .build();
-        s3Client.putObject(putObjectRequest, software.amazon.awssdk.core.sync.RequestBody.fromInputStream(data, size));
-    }
-
-    public void deleteObject(String key) {
-        DeleteObjectRequest deleteObjectRequest = DeleteObjectRequest.builder()
-                .bucket(bucketName)
-                .key(key)
-                .build();
-        s3Client.deleteObject(deleteObjectRequest);
-    }
-
-    public void copyObject(String sourceKey, String destinationKey) {
-        CopyObjectRequest copyObjectRequest = CopyObjectRequest.builder()
-                .sourceBucket(bucketName)
-                .sourceKey(sourceKey)
-                .destinationBucket(bucketName)
-                .destinationKey(destinationKey)
-                .build();
-        s3Client.copyObject(copyObjectRequest);
-    }
-
-    // 这里可以继续添加其他你需要的S3服务方法
-}
+# 根据需要处理后续的重定向或二因素认证等步骤
