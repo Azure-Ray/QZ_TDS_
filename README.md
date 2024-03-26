@@ -1,52 +1,65 @@
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+要将下载的CSV文件导入到Amazon Aurora PostgreSQL数据库中，并且在导入之前清空目标表，你可以使用Python的`psycopg2`库来实现这个过程。下面是一步步的指导，包括如何安装必要的库、连接到数据库、清空表以及导入CSV文件的步骤。
 
-# 配置Chrome的无痕模式
-chrome_options = Options()
-chrome_options.add_argument("--incognito")
+### 1. 安装必要的Python库
 
-# 指定chromedriver的路径
-driver = webdriver.Chrome(executable_path='C:/users/sss/ccc/aaa/chromedriver.exe', options=chrome_options)
+首先，你需要安装`psycopg2`库，如果还没有安装的话。这个库允许Python连接和操作PostgreSQL数据库。打开终端或命令提示符，运行以下命令来安装：
 
-# 打开Microsoft登录页面
-driver.get("https://login.microsoftonline.com")
+```bash
+pip install psycopg2-binary
+```
 
-# 输入邮箱并提交
-email_input = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "i0116")))
-email_input.send_keys("your_email@example.com" + Keys.ENTER)
+### 2. 编写代码导入CSV到Aurora PostgreSQL
 
-# 输入密码
-password_input = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "i0118")))
-password_input.send_keys("your_password" + Keys.ENTER)
+以下是Python脚本的示例，展示了如何连接到数据库、清空表以及导入CSV文件：
 
-# 点击登录按钮
-login_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "idSIButton9")))
-login_button.click()
+```python
+import psycopg2
+import csv
 
-# 处理“保持登录状态”提示
+# 数据库连接参数
+dbname = 'your_dbname'
+user = 'your_user'
+password = 'your_password'
+host = 'your_db_host'
+port = 'your_db_port'  # 默认是5432
+
+# CSV文件路径
+csv_file_path = '/path/to/your/downloaded/file.csv'
+
+# 连接到数据库
+conn = psycopg2.connect(dbname=dbname, user=user, password=password, host=host, port=port)
+cur = conn.cursor()
+
+# 清空表
 try:
-    stay_signed_in_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.ID, "idSIButton9")))
-    stay_signed_in_button.click()
-except TimeoutException:
-    print("No 'Stay signed in?' prompt found.")
+    cur.execute('TRUNCATE TABLE aaa RESTART IDENTITY;')
+    print("Table 'aaa' has been cleared.")
+except psycopg2.Error as e:
+    print(f"Error clearing table aaa: {e}")
+    conn.rollback()  # 回滚事务
 
-# 点击i标签的按钮来打开下拉框选项
-i_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.CSS_SELECTOR, "i.icon-menu.col-menu.list.header.context.list-column-icon")))
-i_button.click()
+# 导入CSV文件
+try:
+    with open(csv_file_path, 'r') as f:
+        next(f)  # 跳过标题行
+        cur.copy_from(f, 'aaa', sep=',')
+        conn.commit()
+        print("CSV file has been imported into table 'aaa'.")
+except Exception as e:
+    print(f"Error importing CSV file: {e}")
+    conn.rollback()  # 回滚事务
 
-# 等待下拉框出现并点击"Export"
-export_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//div[@data-context-menu-label='Export']")))
-export_button.click()
+# 关闭数据库连接
+cur.close()
+conn.close()
+```
 
-# 等待导出选项出现并选择"CSV"
-csv_button = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((By.XPATH, "//div[contains(text(), 'CSV')]")))
-csv_button.click()
+请确保替换`your_dbname`、`your_user`、`your_password`、`your_db_host`、`your_db_port`和`/path/to/your/downloaded/file.csv`为你的实际数据库连接信息和CSV文件路径。
 
-# 假设文件已经下载，接下来的步骤是将下载的CSV文件导入数据库，这部分代码将根据实际情况编写
+### 注意事项：
 
-# 注意：实际使用时请根据页面元素进行适当的调整
+- 在导入CSV文件之前，脚本使用`TRUNCATE TABLE`语句来清空目标表。这个操作将删除表中的所有行，所以请确保你有备份或确实希望这么做。
+- `copy_from`方法用于将CSV数据快速导入表中。确保CSV文件的结构与目标表`aaa`的结构相匹配。
+- 如果CSV文件使用的不是逗号作为分隔符，需要相应地调整`sep=','`参数。
+
+这段代码提供了一个基本的框架，可以根据你的具体需求进行调整。在实施前，确保你具备操作指定数据库和表的相应权限，并已经采取了必要的数据备份措施。
