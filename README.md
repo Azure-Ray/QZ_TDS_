@@ -1,20 +1,13 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+import os
 
-# 指定下载文件的默认目录
-download_folder = "/path/to/your/download/directory"
+# 获取当前用户的主目录
+home_directory = os.path.expanduser("~")
 
-chrome_options = Options()
-chrome_options.add_experimental_option("prefs", {
-  "download.default_directory": download_folder,  # 设置下载路径
-  "download.prompt_for_download": False,  # 禁止弹出下载前的确认框
-  "download.directory_upgrade": True,  # 设置下载路径时自动创建目录
-  "safebrowsing.enabled": True  # 保持安全浏览功能启用
-})
+# 在主目录下创建一个子目录用于下载文件
+download_folder = os.path.join(home_directory, "downloads_from_selenium")
 
-# 初始化WebDriver
-driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+# 如果下载目录不存在，则创建它
+if not os.path.exists(download_folder):
+    os.makedirs(download_folder)
 
-# 接下来是你的Selenium操作，如登录、导航、点击下载CSV文件等
+print(f"文件将被下载到：{download_folder}")
