@@ -1,13 +1,26 @@
 import os
+import shutil
 
-# 获取当前用户的主目录
-home_directory = os.path.expanduser("~")
+def clear_download_folder(folder_path):
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print(f'Failed to delete {file_path}. Reason: {e}')
 
-# 在主目录下创建一个子目录用于下载文件
-download_folder = os.path.join(home_directory, "downloads_from_selenium")
 
-# 如果下载目录不存在，则创建它
-if not os.path.exists(download_folder):
-    os.makedirs(download_folder)
-
-print(f"文件将被下载到：{download_folder}")
+try:
+    driver.get("your_login_page_url")
+    email_input = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.ID, "i0116"))
+    )
+    email_input.send_keys("your_email@example.com" + Keys.ENTER)
+    
+    # 填写密码和其他登录步骤
+    # ...
+except Exception as e:
+    print(f"Already logged in or login page not loaded properly. Reason: {e}")
