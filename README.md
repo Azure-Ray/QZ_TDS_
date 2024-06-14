@@ -1,26 +1,12 @@
-Subject: API Integration Instructions and Postman Collection
+Subject: RBS Job Management Update
 
-Dear [Recipient's Name],
+Hi [Recipient's Name],
 
-I hope this email finds you well.
+Attached is the Excel file containing all the RBS jobs I've collected. I've filtered the data to show only the elf group jobs (you can remove the filter to see all jobs).
 
-Please find attached the Postman collection file for your reference. Below, I've outlined the steps to call the API and provided example URLs and screenshots for your convenience.
+In the last column, you'll find brief descriptions for each job. Please review and let me know if there are any errors.
 
-Gateway URL: [gateway url]
+We can discuss this in our daily meeting on Monday or I can book a separate meeting if needed.
 
-Implement URL: [implement url]
-
-1. Get Payee List
-URL: [implement url]/getPayeeList
-Description: Supports SAML3 token
-Screenshot: [Insert screenshot here]
-2. Add Contact
-URL: [implement url]/addContact
-Description: Only supports IB2B
-Note: The add account and add contact API URLs are the same. We determine the action based on the presence of contactId in the contactAddressList and financialAddressList within the request body. If it is an add contact request, a contactId will be generated after adding.
-Screenshot: [Insert screenshot here]
-3. Add Account
-URL: [implement url]/addAccount
-Description: Only supports IB2B
-Screenshot: [Insert screenshot here]
-If you have any questions or need further assistance, please don't hesitate to contact me.
+Best,
+Xiaoyi
