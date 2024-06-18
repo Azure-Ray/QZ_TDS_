@@ -1,105 +1,75 @@
-import org.springframework.http.*;
-import org.springframework.web.client.RestTemplate;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
+import React, { Component } from 'react';
+import axios from 'axios';
 
-import java.util.*;
-import java.util.stream.Collectors;
+class YourComponent extends Component {
+  state = {
+    isFetching: false,
+    dbName: '',
+    scriptType: '',
+    jdbcList: [],
+    dbJdbcLink: ''
+  };
 
-public class GitHubService {
+  componentDidMount() {
+    this.fetchJdbcList();
+  }
 
-    private final RestTemplate gitRestTemplateWithProxy;
-    private final GitHubProperties gitHubProperties;
-
-    public GitHubService(RestTemplate gitRestTemplateWithProxy, GitHubProperties gitHubProperties) {
-        this.gitRestTemplateWithProxy = gitRestTemplateWithProxy;
-        this.gitHubProperties = gitHubProperties;
+  fetchJdbcList = async () => {
+    try {
+      const response = await axios.get('/get-jdbc-list');
+      this.setState({ jdbcList: response.data });
+    } catch (error) {
+      console.error("Error fetching JDBC list", error);
     }
+  };
 
-    public List<AAA> fetchYamlFile(String gitUrl_) {
-        String gitUrl = constructApiUrl(gitUrl_);
-        String gitRepoUrl = String.format("%s/contents/jdbc_list.yaml", gitUrl);
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(gitHubProperties.getToken());
-        HttpEntity<String> entity = new HttpEntity<>(headers);
-        ResponseEntity<GithubFile[]> response = gitRestTemplateWithProxy.exchange(
-                gitRepoUrl, HttpMethod.GET, entity, GithubFile[].class);
-        
-        if (response.getBody() == null || response.getBody().length == 0) {
-            return Collections.emptyList();
-        }
+  handleDbNameChange = (event) => {
+    const selectedDbName = event.target.value;
+    const selectedDb = this.state.jdbcList.find(db => db.name === selectedDbName);
+    const selectedDbJdbcLink = selectedDb ? selectedDb.value : '';
+    this.setState({ dbName: selectedDbName, dbJdbcLink: selectedDbJdbcLink });
+  };
 
-        String fileContent = new String(Base64.getDecoder().decode(response.getBody()[0].getContent()));
-        Yaml yaml = new Yaml(new Constructor(Map.class));
-        Map<String, String> yamlMap = yaml.load(fileContent);
+  handleScriptTypeChange = (event) => {
+    this.setState({ scriptType: event.target.value });
+  };
 
-        return yamlMap.entrySet().stream()
-                .map(entry -> new AAA(entry.getKey(), entry.getValue()))
-                .collect(Collectors.toList());
-    }
+  handleModalClose = () => {
+    this.setState({ isFetching: false });
+    this.modal.hide(); // Ensure the modal is hidden
+  };
 
-    private String constructApiUrl(String gitUrl_) {
-        // Implement the logic to construct the API URL
-        // Assuming gitUrl_ is in the format of "<owner>/<repo>"
-        return String.format("https://api.github.com/repos/%s", gitUrl_);
-    }
+  render() {
+    const { dbName, scriptType, jdbcList, isFetching } = this.state;
+    const avatarUrl = `https://photos-global.hsbc/casual/square/${getCookie("staffId").substring(0, 4)}/${getCookie("staffId")}.jpg`;
 
-    public static class GitHubProperties {
-        private String token;
-
-        public String getToken() {
-            return token;
-        }
-
-        public void setToken(String token) {
-            this.token = token;
-        }
-    }
-
-    public static class GithubFile {
-        private String name;
-        private String content;
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getContent() {
-            return content;
-        }
-
-        public void setContent(String content) {
-            this.content = content;
-        }
-    }
-
-    public static class AAA {
-        private String name;
-        private String value;
-
-        public AAA(String name, String value) {
-            this.name = name;
-            this.value = value;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public void setName(String name) {
-            this.name = name;
-        }
-
-        public String getValue() {
-            return value;
-        }
-
-        public void setValue(String value) {
-            this.value = value;
-        }
-    }
+    return (
+      <div className="container p-5">
+        <div className="header-container d-flex justify-content-between align-items-center mb-4">
+          <h1 className="header-text">Welcome, {getCookie("displayName")}</h1>
+          <img src={avatarUrl} alt="User Avatar" style={{ width: '50px', height: '50px', borderRadius: '50%' }} />
+        </div>
+        <h1>SQL Version Executor</h1>
+        <div className="mb-3">
+          <label htmlFor="dbName" className="form-label">Database Name</label>
+          <select className="form-select" id="dbName" value={dbName} onChange={this.handleDbNameChange}>
+            <option value="">Select Database</option>
+            {jdbcList.map(db => (
+              <option key={db.name} value={db.name}>{db.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="mb-3">
+          <label htmlFor="scriptType" className="form-label">SQL Type</label>
+          <select className="form-select" id="scriptType" value={scriptType} onChange={this.handleScriptTypeChange}>
+            <option value="">Select SQL Type</option>
+            <option value="ddl">DDL</option>
+            <option value="dml">DML</option>
+          </select>
+        </div>
+      </div>
+    );
+  }
 }
+
+export default YourComponent;
