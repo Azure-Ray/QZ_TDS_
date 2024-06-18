@@ -1,101 +1,31 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SQL Version Executor</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-</head>
-<body>
-    <div id="root"></div>
-    <script src="https://unpkg.com/react/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    <script type="text/babel">
+#!/bin/bash
 
-      class YourComponent extends React.Component {
-        state = {
-          isFetching: false,
-          dbName: '',
-          scriptType: '',
-          jdbcList: [],
-          dbJdbcLink: ''
-        };
+# 要处理的分支名称数组
+BRANCHES_TO_TAG=("branch_name1" "branch_name2" "branch_name3")
+# 标签前缀名称
+TAG_PREFIX="tag_prefix"
 
-        handleDbNameClick = async () => {
-          if (this.state.jdbcList.length === 0) {
-            try {
-              const response = await axios.get('/get-jdbc-list');
-              this.setState({ jdbcList: response.data });
-            } catch (error) {
-              console.error("Error fetching JDBC list", error);
-            }
-          }
-        };
+# 遍历每个分支
+for BRANCH_TO_TAG in "${BRANCHES_TO_TAG[@]}"; do
+    # 标签名称可以使用分支名称或添加前缀
+    TAG_NAME="${TAG_PREFIX}_${BRANCH_TO_TAG}"
 
-        handleDbNameChange = (event) => {
-          const selectedDbName = event.target.value;
-          const selectedDb = this.state.jdbcList.find(db => db.name === selectedDbName);
-          const selectedDbJdbcLink = selectedDb ? selectedDb.value : '';
-          this.setState({ dbName: selectedDbName, dbJdbcLink: selectedDbJdbcLink });
-        };
+    # 检查分支是否存在
+    if git show-ref --verify --quiet refs/heads/$BRANCH_TO_TAG; then
+        # 创建标签
+        git tag $TAG_NAME $BRANCH_TO_TAG
 
-        handleScriptTypeChange = (event) => {
-          this.setState({ scriptType: event.target.value });
-        };
+        # 推送标签到远程仓库
+        git push origin $TAG_NAME
 
-        handleModalClose = () => {
-          this.setState({ isFetching: false });
-          this.modal.hide(); // Ensure the modal is hidden
-        };
+        # 删除本地分支
+        git branch -d $BRANCH_TO_TAG
 
-        render() {
-          const { dbName, scriptType, jdbcList, isFetching } = this.state;
-          const avatarUrl = `https://photos-global.hsbc/casual/square/${getCookie("staffId").substring(0, 4)}/${getCookie("staffId")}.jpg`;
+        # 删除远程分支
+        git push origin --delete $BRANCH_TO_TAG
 
-          return (
-            <div className="container p-5">
-              <div className="header-container d-flex justify-content-between align-items-center mb-4">
-                <h1 className="header-text">Welcome, {getCookie("displayName")}</h1>
-                <img src={avatarUrl} alt="User Avatar" style={{ width: '50px', height: '50px', borderRadius: '50%' }} />
-              </div>
-              <h1>SQL Version Executor</h1>
-              <div className="mb-3">
-                <label htmlFor="dbName" className="form-label">Database Name</label>
-                <select
-                  className="form-select"
-                  id="dbName"
-                  value={dbName}
-                  onClick={this.handleDbNameClick}
-                  onChange={this.handleDbNameChange}
-                >
-                  <option value="">Select Database</option>
-                  {jdbcList.map(db => (
-                    <option key={db.name} value={db.name}>{db.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-3">
-                <label htmlFor="scriptType" className="form-label">SQL Type</label>
-                <select className="form-select" id="scriptType" value={scriptType} onChange={this.handleScriptTypeChange}>
-                  <option value="">Select SQL Type</option>
-                  <option value="ddl">DDL</option>
-                  <option value="dml">DML</option>
-                </select>
-              </div>
-            </div>
-          );
-        }
-      }
-
-      const getCookie = (name) => {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-      };
-
-      ReactDOM.render(<YourComponent />, document.getElementById('root'));
-    </script>
-</body>
-</html>
+        echo "Branch '$BRANCH_TO_TAG' has been tagged as '$TAG_NAME' and deleted."
+    else
+        echo "Branch '$BRANCH_TO_TAG' does not exist."
+    fi
+done
