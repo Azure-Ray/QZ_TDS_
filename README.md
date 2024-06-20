@@ -1,64 +1,41 @@
-CREATE TABLE jenkins_config (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255),
-    type VARCHAR(255),
-    platform VARCHAR(255),
-    host VARCHAR(255),
-    query TEXT
-);
-@Entity
-@Table(name = "jenkins_config")
-public class JenkinsConfigEntity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    private String name;
-    private String type;
-    private String platform;
-    private String host;
-    private String query;
+import re
 
-    // Getters and setters
-}
+# 你的配置文本
+text = """
+name: xxx
+type: xxx
+platform: xxx
+host: xxx
+query: xxx
+name: xxx2
+type: xxx2
+platform: xxx2
+host: xxx2
+query: xxx2
+name: xxx3
+type: xxx3
+platform: xxx3
+host: xxx3
+query: xxx3
+...
+name: xxxn
+type: xxxn
+platform: xxxn
+host: xxxn
+query: xxxn
+"""
 
-public interface JenkinsConfigRepository extends JpaRepository<JenkinsConfigEntity, Long> {
-}
-@Service
-public class JenkinsConfigService {
-    @Autowired
-    private JenkinsConfigRepository jenkinsConfigRepository;
+# 匹配每个配置块
+pattern = re.compile(r'name:\s*(\S+)\s*type:\s*(\S+)\s*platform:\s*(\S+)\s*host:\s*(\S+)\s*query:\s*(\S+)')
+matches = pattern.findall(text)
 
-    public List<SplunkJenkinsConfig.JenkinsConfig> loadJenkinsConfigs() {
-        List<JenkinsConfigEntity> entities = jenkinsConfigRepository.findAll();
-        return entities.stream().map(this::convertToJenkinsConfig).collect(Collectors.toList());
-    }
+# 生成SQL语句
+sql_statements = []
+for match in matches:
+    name, type_, platform, host, query = match
+    sql = f"INSERT INTO jenkins_config (name, type, platform, host, query) VALUES ('{name}', '{type_}', '{platform}', '{host}', '{query}');"
+    sql_statements.append(sql)
 
-    private SplunkJenkinsConfig.JenkinsConfig convertToJenkinsConfig(JenkinsConfigEntity entity) {
-        SplunkJenkinsConfig.JenkinsConfig config = new SplunkJenkinsConfig.JenkinsConfig();
-        config.setName(entity.getName());
-        config.setType(entity.getType());
-        config.setPlatform(entity.getPlatform());
-        config.setHost(entity.getHost());
-        config.setQuery(entity.getQuery());
-        return config;
-    }
-}
-@Configuration
-public class SplunkJenkinsConfig {
-    @Getter
-    private List<JenkinsConfig> splunkDetails = new ArrayList<>();
-
-    @Autowired
-    public SplunkJenkinsConfig(JenkinsConfigService jenkinsConfigService) {
-        this.splunkDetails = jenkinsConfigService.loadJenkinsConfigs();
-    }
-
-    @Data
-    public static class JenkinsConfig {
-        private String name; 
-        private String type;
-        private String platform; 
-        private String host; 
-        private String query;
-    }
-}
+# 输出结果
+for sql in sql_statements:
+    print(sql)
