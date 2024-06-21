@@ -4,8 +4,12 @@ export const saveSchedulerByGMT = (scheduler, timezone) => {
     }
 
     const parseTimeList = (scheduler) => {
-        // 假设parseTimeList方法已经定义
-        return scheduler.split(',').map(time => time.trim());
+        const times = scheduler.match(/\[.*?\]/);
+        if (times) {
+            return times[0].slice(1, -1).split(',').map(time => time.trim());
+        } else {
+            return [scheduler.slice(scheduler.indexOf(':') + 1).trim()];
+        }
     };
 
     const revertTimeToGMT = (time, timezone) => {
@@ -23,7 +27,11 @@ export const saveSchedulerByGMT = (scheduler, timezone) => {
     const padZero = (num) => num.toString().padStart(2, '0');
 
     const formatScheduler = (type, processedTimes) => {
-        return `${type}:${processedTimes}`;
+        if (processedTimes.includes(',')) {
+            return `${type}:[${processedTimes}]`;
+        } else {
+            return `${type}:${processedTimes}`;
+        }
     };
 
     if (scheduler.startsWith('DAILY_AT:')) {
@@ -39,6 +47,3 @@ export const saveSchedulerByGMT = (scheduler, timezone) => {
         return formatScheduler('WEEKLY_AT', processedTimes);
     }
 };
-
-// Helper function to pad numbers with leading zeros
-const padZero = (num) => num.toString().padStart(2, '0');
