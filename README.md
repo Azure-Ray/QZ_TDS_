@@ -19,51 +19,31 @@ export const saveSchedulerByGMT = (scheduler, timezone) => {
     const times = parseTimeList(scheduler);
     const processedTimes = times.map(timeEntry => {
       const [day, time] = timeEntry.split('-').map(part => part.trim());
-      const adjustedTime = revertTimeToGMT(time, timezone);
-      const adjustedDay = adjustDayForTimeZone(day, time, timezone);
+      const { adjustedTime, adjustedDay } = revertTimeToGMTWithDayAdjustment(time, day, timezone);
       return `${adjustedDay}-${adjustedTime}`;
     }).join(',');
     return formatScheduler({ type: 'WEEK_AT', processedTimes });
   }
 };
 
-const revertTimeToGMT = (time, timezone) => {
+const revertTimeToGMTWithDayAdjustment = (time, day, timezone) => {
   let [hours, minutes] = time.split(':').map(Number);
   const date = new Date();
   date.setHours(hours, minutes, 0, 0);
 
   if (timezone === 'Asia/Shanghai') {
     date.setHours(date.getHours() - 8);
-    adjustBoundaryForShanghaiTime(date);
-  } else {
-    // Handle other timezones if necessary
-  }
-
-  return `${padZero(date.getUTCHours())}:${padZero(date.getUTCMinutes())}`;
-};
-
-const adjustBoundaryForShanghaiTime = (date) => {
-  if (date.getHours() < 0) {
-    date.setUTCDate(date.getUTCDate() - 1);
-    date.setUTCHours(24 + date.getUTCHours());
-  } else if (date.getHours() >= 24) {
-    date.setUTCDate(date.getUTCDate() + 1);
-    date.setUTCHours(date.getUTCHours() - 24);
-  }
-};
-
-const adjustDayForTimeZone = (day, time, timezone) => {
-  let [hours] = time.split(':').map(Number);
-
-  if (timezone === 'Asia/Shanghai') {
-    hours -= 8;
-    if (hours < 0) {
-      hours += 24;
-      return getPreviousDay(day);
+    if (date.getUTCHours() < 0) {
+      date.setUTCDate(date.getUTCDate() - 1);
+      date.setUTCHours(24 + date.getUTCHours());
+      day = getPreviousDay(day);
     }
   }
 
-  return day;
+  return {
+    adjustedTime: `${padZero(date.getUTCHours())}:${padZero(date.getUTCMinutes())}`,
+    adjustedDay: day
+  };
 };
 
 const getPreviousDay = (day) => {
