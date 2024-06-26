@@ -1,8 +1,6 @@
-Subject: Clarification and Meeting Request for GMT Project
+As discussed today regarding the GMT project, task-9999 add account, the request body for financial-account is missing the contact address object. Both papi and sapi financial-account requests lack this contact address object.
 
-Hi [Recipient’s Name],
-
-As discussed today regarding the GMT project, task-9999 add account, the request body for financial-account doesn’t meet the required fields due to the edited contact address (neither papi nor sapi fulfill the requirements). Since the contact address is a part of contact, we can use financial-contact to edit it.
+Since the contact address is a part of contact, we can use financial-contact to edit it.
 
 The proposed logic is as follows:
 
