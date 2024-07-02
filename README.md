@@ -65,6 +65,11 @@ public class DataPreparation {
             }
         }
 
+        // Logging the transformed data
+        for (List<Writable> record : transformedData) {
+            log.info("Transformed record: {}", record);
+        }
+
         // Create a RecordReader from the transformed data
         RecordReader finalReader = new CollectionRecordReader(transformedData);
 
