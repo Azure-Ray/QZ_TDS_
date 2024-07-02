@@ -37,10 +37,10 @@ public class DataPreparation {
         SimpleDateFormat dateFormat = new SimpleDateFormat("M/d/yyyy HH:mm:ss");
 
         for (List<Writable> record : originalData) {
-            String status = record.get(2).toString();
+            String status = record.get(2).toString().trim();
             if ("T".equals(status)) {
                 String dateStr = record.get(0).toString().replace(" 0:00", ""); // Remove " 0:00"
-                String timeStr = record.get(1).toString();
+                String timeStr = record.get(1).toString().trim();
                 String datetimeStr = dateStr + " " + timeStr;
                 Date date = dateFormat.parse(datetimeStr);
                 double timestamp = date.getTime();
@@ -54,12 +54,7 @@ public class DataPreparation {
                     } else {
                         try {
                             double numericValue = Double.parseDouble(value.toString());
-                            if (numericValue < -10000 || numericValue > 10000000) { // Example thresholds for abnormal values
-                                log.warn("Abnormal value detected: {} at column {}", numericValue, i);
-                                newRecord.add(new DoubleWritable(0)); // Replace abnormal values with 0
-                            } else {
-                                newRecord.add(new DoubleWritable(numericValue));
-                            }
+                            newRecord.add(new DoubleWritable(numericValue));
                         } catch (NumberFormatException e) {
                             log.warn("Non-numeric value detected: {} at column {}", value.toString(), i);
                             newRecord.add(new DoubleWritable(0)); // Replace non-numeric values with 0
