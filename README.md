@@ -54,7 +54,7 @@ public class DataPreparation {
                     } else {
                         try {
                             double numericValue = Double.parseDouble(value.toString());
-                            if (numericValue < 0 || numericValue > 1000000) { // Example threshold for abnormal values
+                            if (numericValue < -10000 || numericValue > 10000000) { // Example thresholds for abnormal values
                                 log.warn("Abnormal value detected: {} at column {}", numericValue, i);
                                 newRecord.add(new DoubleWritable(0)); // Replace abnormal values with 0
                             } else {
