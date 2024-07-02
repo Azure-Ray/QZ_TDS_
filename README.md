@@ -9,9 +9,6 @@ import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
 import org.nd4j.linalg.dataset.api.iterator.recordreader.RecordReaderDataSetIterator;
 import org.nd4j.linalg.dataset.api.preprocessor.NormalizerMinMaxScaler;
 import org.datavec.api.records.reader.impl.collection.CollectionRecordReader;
-import org.nd4j.linalg.dataset.DataSet;
-import org.nd4j.linalg.factory.Nd4j;
-import org.nd4j.linalg.api.ndarray.INDArray;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -41,6 +38,7 @@ public class DataPreparation {
         TransformProcess tp = new TransformProcess.Builder(inputDataSchema)
                 .filter(new org.datavec.api.transform.filter.ConditionFilter(
                         new org.datavec.api.transform.condition.column.StringColumnCondition("status", org.datavec.api.transform.condition.ConditionOp.Equal, "T")))
+                .removeColumns("status") // 移除不需要的列
                 .build();
 
         RecordReader recordReader = new CSVRecordReader(numLinesToSkip, delimiter);
@@ -65,8 +63,9 @@ public class DataPreparation {
             Date date = dateFormat.parse(datetimeStr);
             double timestamp = date.getTime();
 
-            List<Writable> newRecord = new ArrayList<>(record.subList(2, record.size())); // Skip the first two columns (date and time)
-            newRecord.add(0, Nd4j.create(new double[]{timestamp})); // Add the timestamp as the first feature
+            List<Writable> newRecord = new ArrayList<>();
+            newRecord.add(new org.datavec.api.writable.DoubleWritable(timestamp)); // Add the timestamp as the first feature
+            newRecord.addAll(record.subList(2, record.size())); // Add the remaining columns
             finalData.add(newRecord);
         }
 
@@ -83,6 +82,7 @@ public class DataPreparation {
         return iterator;
     }
 }
+
 
 
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
