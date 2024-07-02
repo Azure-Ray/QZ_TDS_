@@ -1,59 +1,55 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <groupId>com.example</groupId>
-    <artifactId>deeplearning4j-example</artifactId>
-    <version>1.0-SNAPSHOT</version>
-    <properties>
-        <maven.compiler.source>21</maven.compiler.source>
-        <maven.compiler.target>21</maven.compiler.target>
-    </properties>
-    <dependencies>
-        <dependency>
-            <groupId>org.deeplearning4j</groupId>
-            <artifactId>deeplearning4j-core</artifactId>
-            <version>1.0.0-M1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.nd4j</groupId>
-            <artifactId>nd4j-native-platform</artifactId>
-            <version>1.0.0-M1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.datavec</groupId>
-            <artifactId>datavec-api</artifactId>
-            <version>1.0.0-M1.1</version>
-        </dependency>
-        <dependency>
-            <groupId>org.datavec</groupId>
-            <artifactId>datavec-local</artifactId>
-            <version>1.0.0-M1.1</version>
-        </dependency>
-    </dependencies>
-</project>
-
-
 import org.datavec.api.records.reader.RecordReader;
 import org.datavec.api.records.reader.impl.csv.CSVRecordReader;
 import org.datavec.api.split.FileSplit;
+import org.datavec.api.transform.schema.Schema;
+import org.datavec.api.transform.TransformProcess;
+import org.datavec.local.transforms.LocalTransformExecutor;
+import org.nd4j.common.io.ClassPathResource;
 import org.nd4j.linalg.dataset.api.iterator.DataSetIterator;
 import org.nd4j.linalg.dataset.api.iterator.recordreader.RecordReaderDataSetIterator;
-import org.nd4j.linalg.dataset.DataSet;
 import org.nd4j.linalg.dataset.api.preprocessor.NormalizerMinMaxScaler;
+import org.datavec.api.transform.schema.Schema.Builder;
+import org.datavec.api.transform.transform.integer.ConvertToInteger;
+import org.datavec.api.transform.transform.doubletransform.ConvertToDouble;
 
 import java.io.File;
+import java.util.List;
 
 public class DataPreparation {
     public static DataSetIterator loadData(String filePath, int batchSize, int labelIndex, int numClasses) throws Exception {
         int numLinesToSkip = 1;
         char delimiter = ',';
+
+        // Define the schema of the input data
+        Schema inputDataSchema = new Schema.Builder()
+                .addColumnsString("date", "time", "status")
+                .addColumnDouble("current")
+                .addColumnDouble("turnover")
+                .addColumnDouble("high")
+                .addColumnDouble("low")
+                .addColumnDouble("change")
+                .addColumnDouble("percent")
+                .build();
+
+        // Define the transformation process
+        TransformProcess tp = new TransformProcess.Builder(inputDataSchema)
+                .filter(new org.datavec.api.transform.filter.ConditionFilter(
+                        new org.datavec.api.transform.condition.column.StringColumnCondition("status", org.datavec.api.transform.condition.ConditionOp.Equal, "T")))
+                .removeColumns("date", "time", "status") // 移除不需要的列
+                .build();
+
         RecordReader recordReader = new CSVRecordReader(numLinesToSkip, delimiter);
         recordReader.initialize(new FileSplit(new File(filePath)));
-
-        DataSetIterator iterator = new RecordReaderDataSetIterator(recordReader, batchSize, labelIndex, numClasses);
         
-        // 归一化数据
+        // Apply the transformation to the dataset
+        List<List<org.datavec.api.writable.Writable>> transformedData = LocalTransformExecutor.execute(recordReader, tp);
+        
+        // Convert transformed data to DataSetIterator
+        RecordReader transformedReader = new org.datavec.api.records.reader.impl.collection.CollectionRecordReader(transformedData);
+        
+        DataSetIterator iterator = new RecordReaderDataSetIterator(transformedReader, batchSize, labelIndex, numClasses);
+        
+        // Normalize data
         NormalizerMinMaxScaler scaler = new NormalizerMinMaxScaler(0, 1);
         scaler.fit(iterator);
         iterator.setPreProcessor(scaler);
@@ -78,7 +74,7 @@ import java.io.File;
 
 public class LSTMModel {
     public static void main(String[] args) throws Exception {
-        int numInputs = 1; // 只有一个特征，即当前指数值
+        int numInputs = 5; // 5个特征：current, turnover, high, low, change, percent
         int numOutputs = 1; // 预测一个值，即未来的指数值
         int numHiddenNodes = 50;
         int batchSize = 64;
@@ -86,7 +82,7 @@ public class LSTMModel {
         int seed = 123;
 
         // 加载数据集
-        DataSetIterator trainData = DataPreparation.loadData("path/to/your/hsi-data.csv", batchSize, 3, 1);
+        DataSetIterator trainData = DataPreparation.loadData("path/to/your/hsi-data.csv", batchSize, 0, 1);
 
         // 构建LSTM神经网络
         MultiLayerNetwork model = new MultiLayerNetwork(new NeuralNetConfiguration.Builder()
@@ -139,7 +135,7 @@ public class PredictSellPoint {
         MultiLayerNetwork model = ModelSerializer.restoreMultiLayerNetwork(modelFile);
 
         // 加载第三个月的数据
-        DataSetIterator testData = DataPreparation.loadData("path/to/your/test-data.csv", 1, 3, 1);
+        DataSetIterator testData = DataPreparation.loadData("path/to/your/test-data.csv", 1, 0, 1);
 
         double maxPrice = Double.MIN_VALUE;
         while (testData.hasNext()) {
