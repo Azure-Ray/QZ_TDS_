@@ -39,7 +39,7 @@ public class DataPreparation {
         for (List<Writable> record : originalData) {
             String status = record.get(2).toString().trim();
             if ("T".equals(status)) {
-                String dateStr = record.get(0).toString().replace(" 0:00", ""); // Remove " 0:00"
+                String dateStr = record.get(0).toString().replace("0:00", "").trim(); // Remove "0:00"
                 String timeStr = record.get(1).toString().trim();
                 String datetimeStr = dateStr + " " + timeStr;
                 Date date = dateFormat.parse(datetimeStr);
