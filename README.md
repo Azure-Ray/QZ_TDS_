@@ -68,15 +68,15 @@
             <input type="text" id="url" placeholder="Enter request URL">
         </div>
         <div class="input-group">
-            <label for="headers">Headers (JSON format)</label>
-            <textarea id="headers" rows="4" placeholder='{"Content-Type": "application/json"}'></textarea>
+            <label for="headers">Headers</label>
+            <textarea id="headers" rows="4" placeholder='key1:value1\nkey2:value2'></textarea>
         </div>
         <div class="input-group">
             <label for="body">Body (JSON format)</label>
             <textarea id="body" rows="6" placeholder='{"key": "value"}'></textarea>
         </div>
         <button onclick="sendRequest()">Send Request</button>
-        <button onclick="importCurl()">Import cURL</button>
+        <button onclick="sendCurl()">Send cURL</button>
         <div class="input-group">
             <label for="curl">cURL Command</label>
             <textarea id="curl" rows="4" placeholder="Enter cURL command here"></textarea>
@@ -91,8 +91,16 @@
         async function sendRequest() {
             const method = document.getElementById('method').value;
             const url = document.getElementById('url').value;
-            const headers = JSON.parse(document.getElementById('headers').value || '{}');
+            const headersText = document.getElementById('headers').value;
             const body = document.getElementById('body').value;
+
+            let headers = {};
+            headersText.split('\n').forEach(header => {
+                const [key, value] = header.split(':');
+                if (key && value) {
+                    headers[key.trim()] = value.trim();
+                }
+            });
 
             const options = {
                 method: method,
@@ -109,7 +117,7 @@
             }
         }
 
-        function importCurl() {
+        async function sendCurl() {
             const curlCommand = document.getElementById('curl').value;
             const curlParts = curlCommand.match(/(?:'[^']*'|"[^"]*"|[^'"\s])+/g);
 
@@ -133,10 +141,19 @@
                 }
             }
 
-            document.getElementById('method').value = method;
-            document.getElementById('url').value = url;
-            document.getElementById('headers').value = JSON.stringify(headers, null, 2);
-            document.getElementById('body').value = body;
+            const options = {
+                method: method,
+                headers: headers,
+                body: ['GET', 'DELETE'].includes(method) ? null : body
+            };
+
+            try {
+                const response = await fetch(url, options);
+                const responseData = await response.text();
+                document.getElementById('response').innerText = responseData;
+            } catch (error) {
+                document.getElementById('response').innerText = 'Error: ' + error;
+            }
         }
     </script>
 </body>
