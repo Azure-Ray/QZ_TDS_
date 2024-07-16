@@ -4,58 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple API Tester</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-        }
-        .container {
-            width: 80%;
-            margin: auto;
-            padding: 20px;
-            border: 1px solid #ccc;
-            border-radius: 10px;
-            background-color: #f9f9f9;
-        }
-        .input-group {
-            margin-bottom: 20px;
-        }
-        .input-group label {
-            display: block;
-            margin-bottom: 5px;
-        }
-        .input-group input,
-        .input-group select,
-        .input-group textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        .input-group textarea {
-            resize: vertical;
-        }
-        button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            background-color: #007bff;
-            color: #fff;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #0056b3;
-        }
-        .response {
-            margin-top: 20px;
-        }
-    </style>
 </head>
-<body>
-    <div class="container">
+<body style="font-family: Arial, sans-serif;">
+    <div class="container" style="width: 80%; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; background-color: #f9f9f9;">
         <h1>Simple API Tester</h1>
-        <div class="input-group">
-            <label for="method">Method</label>
-            <select id="method">
+        <div class="input-group" style="margin-bottom: 20px;">
+            <label for="method" style="display: block; margin-bottom: 5px;">Method</label>
+            <select id="method" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
                 <option value="GET">GET</option>
                 <option value="POST">POST</option>
                 <option value="PATCH">PATCH</option>
@@ -63,27 +18,27 @@
                 <option value="DELETE">DELETE</option>
             </select>
         </div>
-        <div class="input-group">
-            <label for="url">URL</label>
-            <input type="text" id="url" placeholder="Enter request URL">
+        <div class="input-group" style="margin-bottom: 20px;">
+            <label for="url" style="display: block; margin-bottom: 5px;">URL</label>
+            <input type="text" id="url" placeholder="Enter request URL" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px;">
         </div>
-        <div class="input-group">
-            <label for="headers">Headers</label>
-            <textarea id="headers" rows="4" placeholder='key1:value1\nkey2:value2'></textarea>
+        <div class="input-group" style="margin-bottom: 20px;">
+            <label for="headers" style="display: block; margin-bottom: 5px;">Headers</label>
+            <textarea id="headers" rows="4" placeholder='key1:value1\nkey2:value2' style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; resize: vertical;"></textarea>
         </div>
-        <div class="input-group">
-            <label for="body">Body (JSON format)</label>
-            <textarea id="body" rows="6" placeholder='{"key": "value"}'></textarea>
+        <div class="input-group" style="margin-bottom: 20px;">
+            <label for="body" style="display: block; margin-bottom: 5px;">Body (JSON format)</label>
+            <textarea id="body" rows="6" placeholder='{"key": "value"}' style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; resize: vertical;"></textarea>
         </div>
-        <button onclick="sendRequest()">Send Request</button>
-        <button onclick="sendCurl()">Send cURL</button>
-        <div class="input-group">
-            <label for="curl">cURL Command</label>
-            <textarea id="curl" rows="4" placeholder="Enter cURL command here"></textarea>
+        <button onclick="sendRequest()" style="padding: 10px 20px; border: none; border-radius: 5px; background-color: #007bff; color: #fff; cursor: pointer;">Send Request</button>
+        <button onclick="sendCurl()" style="padding: 10px 20px; border: none; border-radius: 5px; background-color: #007bff; color: #fff; cursor: pointer; margin-left: 10px;">Send cURL</button>
+        <div class="input-group" style="margin-top: 20px;">
+            <label for="curl" style="display: block; margin-bottom: 5px;">cURL Command</label>
+            <textarea id="curl" rows="4" placeholder="Enter cURL command here" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; resize: vertical;"></textarea>
         </div>
-        <div class="response">
+        <div class="response" style="margin-top: 20px;">
             <h3>Response</h3>
-            <pre id="response"></pre>
+            <pre id="response" style="white-space: pre-wrap;"></pre>
         </div>
     </div>
 
