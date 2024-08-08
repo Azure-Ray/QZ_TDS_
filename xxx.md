@@ -1,5 +1,2 @@
-fields @timestamp, @message
-| filter @message like /callApi/
-| parse @message "callApi code=* url=* type=* used *" as statusCode, url, type, usedTime
-| filter url == "xxx/xxx/xxxxxx"
-| stats count(*) by bin(1m)
+We are the team responsible for developing and maintaining automation tools within the maintenance department. Our automation tools have already been shared and are being utilized by departments beyond our own. Therefore, we require extensive permissions for the incident/change/problem APIs to ensure seamless functionality and integration across various departments. We kindly request your approval for these permissions.
+
