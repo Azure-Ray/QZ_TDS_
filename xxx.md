@@ -1,35 +1,11 @@
-### Why Use `generate-db-auth-token`?
+Subject: Switching to IAM Role for RDS Authentication
 
-Switching to `generate-db-auth-token` for authentication offers better security by using temporary, dynamically generated tokens instead of static passwords. This approach integrates with AWS IAM for centralized access control and reduces the risk of credential exposure. It also simplifies compliance with security standards.
+Hey [Team/Everyone],
 
-For more detailed information, you can refer to the official AWS documentation:
-- **IAM Database Authentication for Amazon RDS**: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/UsingWithRDS.IAMDBAuth.html
-- **Generate Database Authentication Token**: https://docs.aws.amazon.com/cli/latest/reference/rds/generate-db-auth-token.html
+To reduce the number of times DB passwords are accessed and minimize exposure risks (like password leaks or unauthorized access), we’ve set up a new role, xxx2, and enabled IAM role-based access for our RDS instances. You can now use tokens to log in instead of traditional passwords.
 
-### Step-by-Step Guide to Set Up `generate-db-auth-token` and Connect Using pgAdmin
+In the future, the xxx1 role will also have IAM role-based access enabled. Once this is in place, password-based logins will no longer work for that role. The tokens we use are temporary and valid for [token validity period], so you’ll need to generate a new one each time. I’ve put together a quick guide below on how to generate the token and set up your local environment.
 
-1. **Configure IAM Role and Policy:**
-   - Create an IAM role that has permissions to connect to the RDS instance. Attach the `AmazonRDSFullAccess` policy or a custom policy that includes the `rds-db:connect` permission.
+Also, based on our discussion with [XXX], we’ll be using service accounts moving forward to obtain the necessary permissions for our DB profile role. The service account will also use the same method to generate short-lived tokens.
 
-2. **Enable IAM Database Authentication:**
-   - Go to the RDS console, select your database instance, and navigate to the "Connectivity & security" section.
-   - Ensure that IAM DB authentication is enabled.
-   - If needed, modify the DB parameter group to allow IAM authentication and reboot the DB instance.
-
-3. **Generate the IAM Authentication Token:**
-   - Use the AWS CLI to generate the authentication token:
-     ```bash
-     aws rds generate-db-auth-token --hostname <your-db-hostname> --port <db-port> --region <your-region> --username <db-username>
-     ```
-
-4. **Connect Using pgAdmin:**
-   - Open pgAdmin and create a new server connection.
-   - In the "General" tab, enter the name of your server.
-   - In the "Connection" tab, input the following:
-     - **Host**: Your RDS endpoint (e.g., `your-db-hostname.region.rds.amazonaws.com`)
-     - **Port**: The database port (typically `5432` for PostgreSQL)
-     - **Username**: The database username
-     - **Password**: Paste the generated token from the previous step
-   - Click "Save" and connect.
-
-By following these steps, you will be able to securely connect to your PostgreSQL database using the generated IAM authentication token in pgAdmin.
+Feel free to reach out if you have any questions!
