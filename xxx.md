@@ -1,5 +1,170 @@
-To reduce the number of times DB passwords are accessed and minimize exposure risks like password leaks, unauthorized access, and potential compliance issues, we’ve set up a new role, xxx2, and enabled IAM role-based access for our RDS instances. You can now use tokens to log in instead of traditional passwords.
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: test_producer_group
+    enabled: true
+  consumer:
+    group: test_consumer_group
+    enabled: true
+    topic: RequestTopic
 
-In the future, the xxx1 role will also have IAM role-based access enabled. Once this is in place, password-based logins will no longer work for that role. The tokens we use are temporary and valid for 15 minutes, so you’ll need to generate a new one each time. I’ve put together a quick guide below on how to generate the token and set up your local environment.
 
-Also, based on our discussion with [XXX], we’ll be using service accounts moving forward to obtain the necessary permissions for our DB profile role. The service account will also use the same method to generate short-lived tokens.
+package com.example.rocketmqmockservice;
+
+import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
+import org.apache.rocketmq.spring.core.RocketMQTemplate;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.stereotype.Service;
+
+@SpringBootApplication
+public class RocketMQMockServiceApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(RocketMQMockServiceApplication.class, args);
+    }
+}
+
+@Service
+class MessageProcessor {
+
+    private final RocketMQTemplate rocketMQTemplate;
+
+    public MessageProcessor(RocketMQTemplate rocketMQTemplate) {
+        this.rocketMQTemplate = rocketMQTemplate;
+    }
+
+    // 消息监听器，用于接收消息并处理
+    @RocketMQMessageListener(topic = "RequestTopic", consumerGroup = "test_consumer_group")
+    public void onMessage(String receivedMessage) {
+        System.out.println("Received message: " + receivedMessage);
+
+        // 根据接收到的消息判断响应内容
+        String responseContent = "Fixed Response";
+        if ("special request".equalsIgnoreCase(receivedMessage)) {
+            responseContent = "Special Response";
+        }
+
+        // 发送响应消息到 ResponseTopic
+        Message<String> message = MessageBuilder.withPayload(responseContent).build();
+        rocketMQTemplate.convertAndSend("ResponseTopic", message);
+    }
+}
+
+
+
+
+
+#!/bin/bash
+
+# 启动 NameServer
+nohup sh ./bin/mqnamesrv &
+
+# 启动 Broker
+nohup sh ./bin/mqbroker -n 127.0.0.1:9876 autoCreateTopicEnable=true &
+
+
+package com.example.rocketmqmockservice;
+
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+import java.io.IOException;
+
+@SpringBootApplication
+public class RocketMQMockServiceApplication implements CommandLineRunner {
+
+    public static void main(String[] args) {
+        SpringApplication.run(RocketMQMockServiceApplication.class, args);
+    }
+
+    @Override
+    public void run(String... args) throws Exception {
+        startRocketMQ();
+    }
+
+    private void startRocketMQ() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("sh", "./src/main/resources/rocketmq/start-rocketmq.sh");
+            pb.inheritIO();
+            Process process = pb.start();
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new RuntimeException("Failed to start RocketMQ");
+            }
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+package com.example.mockmq.service;
+
+import org.springframework.stereotype.Service;
+
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+
+@Service
+public class MockMQService {
+
+    private final BlockingQueue<String> queue = new LinkedBlockingQueue<>();
+
+    // 生产消息（模拟发送消息）
+    public void produce(String message) {
+        try {
+            queue.put(message);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    // 消费消息（模拟接收消息）
+    public String consume() {
+        try {
+            return queue.take();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+    }
+}
+
+package com.example.mockmq.controller;
+
+import com.example.mockmq.service.MockMQService;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/mq")
+public class MockMQController {
+
+    private final MockMQService mockMQService;
+
+    public MockMQController(MockMQService mockMQService) {
+        this.mockMQService = mockMQService;
+    }
+
+    // 生产消息的API
+    @PostMapping("/produce")
+    public String produceMessage(@RequestParam String message) {
+        mockMQService.produce(message);
+        return "Message produced: " + message;
+    }
+
+    // 消费消息的API
+    @GetMapping("/consume")
+    public String consumeMessage() {
+        String message = mockMQService.consume();
+        return message != null ? "Message consumed: " + message : "No messages available";
+    }
+}
+
+
+curl -X POST "http://localhost:8080/mq/produce?message=Hello+World"
+
+
+curl -X GET "http://localhost:8080/mq/consume"
