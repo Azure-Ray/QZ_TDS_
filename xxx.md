@@ -1,89 +1,57 @@
-package com.example.rocketmqmockservice;
+# NLB for MSK instance
+module "msk_nlb_proxy" {
+  source  = "../../modules/shared_modules/nlb"
+  environment = var.environment
+  name_prefix = "msk-nlb"
+  vpc_id = var.internal_vpc_id
+  subnet_ids = var.internal_subnet_ids
 
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-
-import java.io.File;
-import java.io.IOException;
-
-@SpringBootApplication
-public class RocketMQMockServiceApplication implements CommandLineRunner {
-
-    public static void main(String[] args) {
-        SpringApplication.run(RocketMQMockServiceApplication.class, args);
+  target_mapping = [
+    {
+      from_port = "9092"
+      to_port   = "9092"
+      protocol  = "TCP"
+      ip_target = true
+      targets   = data.dns_a_record_set.msk_addrs
     }
-
-    @Override
-    public void run(String... args) throws Exception {
-        startRocketMQ();
-    }
-
-    private void startRocketMQ() {
-        try {
-            // 启动 NameServer
-            ProcessBuilder nameSrvPb = new ProcessBuilder(
-                "cmd.exe", "/c", "start", "mqnamesrv.cmd");
-            nameSrvPb.directory(new File("src/main/resources/rocketmq/bin"));
-            nameSrvPb.inheritIO();
-            Process nameSrvProcess = nameSrvPb.start();
-            
-            // 启动 Broker
-            ProcessBuilder brokerPb = new ProcessBuilder(
-                "cmd.exe", "/c", "start", "mqbroker.cmd", "-n", "127.0.0.1:9876", "autoCreateTopicEnable=true");
-            brokerPb.directory(new File("src/main/resources/rocketmq/bin"));
-            brokerPb.inheritIO();
-            Process brokerProcess = brokerPb.start();
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            throw new RuntimeException("Failed to start RocketMQ", e);
-        }
-    }
+  ]
 }
 
-
-
-package com.example.rocketmqmockservice;
-
-import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
-import org.apache.rocketmq.spring.core.RocketMQTemplate;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.support.MessageBuilder;
-import org.springframework.stereotype.Service;
-
-@SpringBootApplication
-public class RocketMQMockServiceApplication {
-
-    public static void main(String[] args) {
-        SpringApplication.run(RocketMQMockServiceApplication.class, args);
-    }
+# MSK Service Endpoint in VPC IDMz
+module "msk_idmz_01_vpce" {
+  source  = "../../modules/shared_modules/vpc-endpoint-service"
+  vpc_id  = var.idmz_vpc_id
+  nlb_arns = [module.msk_nlb_proxy.nlb_arn]
+  tags = merge(var.hsbc_generic_tags, { "dataclassification" = "internal" })
+  whitelisted_principal = var.msk_idmz_01_whitelisted_principal
 }
 
-@Service
-class MessageProcessor {
+# Security Group for MSK Endpoint VPC
+module "msk_internal_01_sg" {
+  source  = "../../modules/shared_modules/security-group"
+  vpc_id  = var.internal_vpc_id
 
-    private final RocketMQTemplate rocketMQTemplate;
-
-    public MessageProcessor(RocketMQTemplate rocketMQTemplate) {
-        this.rocketMQTemplate = rocketMQTemplate;
+  cidr_based_ingress = [
+    {
+      from_port = "9092"
+      to_port   = "9092"
+      protocol  = "tcp"
+      cidr_blocks = var.internal_nonnroutable_vpc_cidr_block
     }
+  ]
+}
 
-    // 消息监听器，用于接收消息并处理
-    @RocketMQMessageListener(topic = "RequestTopic", consumerGroup = "test_consumer_group")
-    public void onMessage(String receivedMessage) {
-        System.out.println("Received message: " + receivedMessage);
+# Route Tables for Peering Connection
+module "vpc_peering_routes" {
+  source            = "../../modules/shared_modules/vpc-peering-routes"
+  source_vpc_id     = var.internal_vpc_id
+  destination_vpc_id = var.idmz_vpc_id
+  route_table_ids   = var.internal_route_table_ids
 
-        // 根据接收到的消息判断响应内容
-        String responseContent = "Fixed Response";
-        if ("special request".equalsIgnoreCase(receivedMessage)) {
-            responseContent = "Special Response";
-        }
-
-        // 发送响应消息到 ResponseTopic
-        Message<String> message = MessageBuilder.withPayload(responseContent).build();
-        rocketMQTemplate.convertAndSend("ResponseTopic", message);
+  routes = [
+    {
+      destination_cidr_block = var.msk_vpc_cidr_block
+      target                 = var.peering_connection_id
     }
+  ]
 }
