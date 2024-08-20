@@ -1,7 +1,43 @@
-1. security_group_id 的声明
-security_group_id 是从创建的安全组资源中输出的值，因此需要在 security_group.tf 文件中正确声明和输出。
+1. msk.tf (修正后的MSK集群配置)
+hcl
+复制代码
+# 创建MSK集群
+resource "aws_msk_cluster" "msk_cluster" {
+  cluster_name           = "example-msk-cluster"
+  kafka_version          = "2.8.0"
+  number_of_broker_nodes = 3
+  
+  # broker_node_group_info 定义每个 broker 节点的信息
+  broker_node_group_info {
+    instance_type  = "kafka.m5.large"
+    client_subnets = var.internal_subnet_ids
+    security_groups = [aws_security_group.msk_internal_01_sg.id]  # 引用已创建的安全组ID
+  }
 
-修正后的 security_group.tf
+  encryption_info {
+    encryption_in_transit {
+      client_broker = "TLS"
+      in_cluster    = true
+    }
+    encryption_at_rest_kms_key_arn = var.existing_kms_key_id
+  }
+
+  configuration_info {
+    arn      = aws_msk_configuration.example.arn
+    revision = aws_msk_configuration.example.latest_revision
+  }
+}
+
+# MSK配置资源（如有需要）
+resource "aws_msk_configuration" "example" {
+  name           = "example-configuration"
+  kafka_versions = ["2.8.0"]
+  server_properties = <<EOF
+auto.create.topics.enable = true
+delete.topic.enable = true
+EOF
+}
+2. security_group.tf (安全组配置)
 hcl
 复制代码
 # 创建MSK的安全组，允许从内部VPC访问
@@ -29,72 +65,81 @@ resource "aws_security_group" "msk_internal_01_sg" {
 output "security_group_id" {
   value = aws_security_group.msk_internal_01_sg.id
 }
-2. broker_node_group_info 的声明和引用
-在 msk.tf 中，broker_node_group_info 是 AWS MSK 集群资源的一部分。在之前的配置中，它已经声明并配置，但我会明确其使用和引用方法。
-
-修正后的 msk.tf
+3. nlb.tf (修正后的NLB配置)
 hcl
 复制代码
-# 创建MSK集群
-resource "aws_msk_cluster" "msk_cluster" {
-  cluster_name           = "example-msk-cluster"
-  kafka_version          = "2.8.0"
-  number_of_broker_nodes = 3
-  
-  # broker_node_group_info 包含关于每个 broker 节点的信息
-  broker_node_group_info {
-    instance_type  = "kafka.m5.large"
-    client_subnets = var.internal_subnet_ids
-    security_groups = [module.msk_security_group.security_group_id]  # 引用已创建的安全组ID
-  }
+# 创建MSK的NLB并配置目标组
+resource "aws_lb" "msk_nlb" {
+  name               = "msk-nlb"
+  load_balancer_type = "network"
+  internal           = true
+  security_groups    = [aws_security_group.msk_internal_01_sg.id]  # 直接引用安全组
+  subnets            = var.internal_subnet_ids
+}
 
-  encryption_info {
-    encryption_in_transit {
-      client_broker = "TLS"
-      in_cluster    = true
-    }
-    encryption_at_rest_kms_key_arn = var.existing_kms_key_id
-  }
+resource "aws_lb_target_group" "msk_target_group" {
+  name     = "msk-target-group"
+  port     = 9092
+  protocol = "TCP"
+  vpc_id   = var.internal_vpc_id
+  target_type = "ip"
 
-  configuration_info {
-    arn      = aws_msk_configuration.example.arn
-    revision = aws_msk_configuration.example.latest_revision
+  health_check {
+    enabled             = true
+    interval            = 30
+    protocol            = "TCP"
+    port                = "9092"
   }
 }
 
-# MSK配置资源（如有需要）
-resource "aws_msk_configuration" "example" {
-  name      = "example-configuration"
-  kafka_versions = ["2.8.0"]
-  server_properties = <<EOF
-auto.create.topics.enable = true
-delete.topic.enable = true
-EOF
+resource "aws_lb_listener" "msk_listener" {
+  load_balancer_arn = aws_lb.msk_nlb.arn
+  port              = 9092
+  protocol          = "TCP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.msk_target_group.arn
+  }
 }
-3. 更新后的 main.tf
+
+# 获取MSK集群的节点IP地址
+data "aws_msk_cluster" "msk" {
+  cluster_name = aws_msk_cluster.msk_cluster.cluster_name
+}
+
+# 配置NLB目标组的目标IP
+resource "aws_lb_target_group_attachment" "msk_targets" {
+  count            = length(data.aws_msk_cluster.msk.broker_node_group_info[0].client_subnet_ips)
+  target_group_arn = aws_lb_target_group.msk_target_group.arn
+  target_id        = element(flatten([for broker in data.aws_msk_cluster.msk.broker_node_group_info: broker.client_subnet_ips]), count.index)
+  port             = 9092
+}
+4. variables.tf (变量声明)
 hcl
 复制代码
-# 引入各个模块配置
-module "msk_nlb_proxy" {
-  source  = "./nlb.tf"
-}
+variable "internal_vpc_id" {}
+variable "internal_subnet_ids" {}
+variable "internal_nonnroutable_vpc_cidr_block" {}
+variable "msk_password" {}
+variable "existing_kms_key_id" {}
+variable "idmz_vpc_id" {}
+variable "internal_route_table_ids" {}
+variable "peering_connection_id" {}
+variable "msk_vpc_cidr_block" {}
+5. dev.tfvars (变量文件)
+hcl
+复制代码
+# MSK NLB配置变量
+internal_vpc_id        = "vpc-xxxxxxxx"
+internal_subnet_ids    = ["subnet-xxxxxx", "subnet-xxxxxx", "subnet-xxxxxx"] # MSK需要三个子网
+internal_nonnroutable_vpc_cidr_block = "10.0.0.0/16"
 
-module "msk_cluster" {
-  source  = "./msk.tf"
-}
+# Secrets Manager配置变量
+msk_password           = "YourMSKPassword"
+existing_kms_key_id    = "arn:aws:kms:region:account-id:key/key-id"
 
-module "msk_security_group" {
-  source  = "./security_group.tf"
-}
-
-module "msk_secrets_manager" {
-  source  = "./secrets_manager.tf"
-}
-
-module "vpc_peering_routes" {
-  source  = "./peering_routes.tf"
-}
-说明
-security_group_id:
-
-现在在 security_gro
+# VPC Peering路由配置变量
+idmz_vpc_id            = "vpc-yyyyyyyy"
+internal_route_table_ids = ["rtb-xxxxxx", "rtb-yyyyyy"]
+peering_connection_id   = "pcx-xxxxxxxx"
+msk_vpc_cidr_block     = "10.1.0.0/16"
