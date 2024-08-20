@@ -1,89 +1,38 @@
-文件结构
-lua
-复制代码
-/msk-terraform
-  |-- main.tf
-  |-- nlb.tf
-  |-- msk.tf
-  |-- security_group.tf
-  |-- secrets_manager.tf
-  |-- peering_routes.tf
-  |-- variables.tf
-/env_var
-  |-- dev.tfvars
-1. main.tf (主文件)
+1. security_group_id 的声明
+security_group_id 是从创建的安全组资源中输出的值，因此需要在 security_group.tf 文件中正确声明和输出。
+
+修正后的 security_group.tf
 hcl
 复制代码
-# 引入各个模块配置
-module "msk_nlb_proxy" {
-  source  = "./nlb.tf"
-}
+# 创建MSK的安全组，允许从内部VPC访问
+resource "aws_security_group" "msk_internal_01_sg" {
+  name        = "msk-internal-sg"
+  description = "Security group for MSK cluster"
+  vpc_id      = var.internal_vpc_id
 
-module "msk_cluster" {
-  source  = "./msk.tf"
-}
+  ingress {
+    from_port   = 9092
+    to_port     = 9092
+    protocol    = "tcp"
+    cidr_blocks = [var.internal_nonnroutable_vpc_cidr_block]
+  }
 
-module "msk_security_group" {
-  source  = "./security_group.tf"
-}
-
-module "msk_secrets_manager" {
-  source  = "./secrets_manager.tf"
-}
-
-module "vpc_peering_routes" {
-  source  = "./peering_routes.tf"
-}
-2. nlb.tf (NLB配置)
-hcl
-复制代码
-# 创建MSK的NLB并配置目标组
-resource "aws_lb" "msk_nlb" {
-  name               = "msk-nlb"
-  load_balancer_type = "network"
-  internal           = true
-  security_groups    = [module.msk_internal_01_sg.security_group_id]
-  subnets            = var.internal_subnet_ids
-}
-
-resource "aws_lb_target_group" "msk_target_group" {
-  name     = "msk-target-group"
-  port     = 9092
-  protocol = "TCP"
-  vpc_id   = var.internal_vpc_id
-  target_type = "ip"
-
-  health_check {
-    enabled             = true
-    interval            = 30
-    protocol            = "TCP"
-    port                = "9092"
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-resource "aws_lb_listener" "msk_listener" {
-  load_balancer_arn = aws_lb.msk_nlb.arn
-  port              = 9092
-  protocol          = "TCP"
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.msk_target_group.arn
-  }
+# 输出安全组ID
+output "security_group_id" {
+  value = aws_security_group.msk_internal_01_sg.id
 }
+2. broker_node_group_info 的声明和引用
+在 msk.tf 中，broker_node_group_info 是 AWS MSK 集群资源的一部分。在之前的配置中，它已经声明并配置，但我会明确其使用和引用方法。
 
-# 获取MSK集群的节点IP地址
-data "aws_msk_cluster" "msk" {
-  cluster_name = aws_msk_cluster.msk_cluster.cluster_name
-}
-
-# 配置NLB目标组的目标IP
-resource "aws_lb_target_group_attachment" "msk_targets" {
-  count            = length(data.aws_msk_cluster.msk.broker_node_group_info[0].client_subnet_ips)
-  target_group_arn = aws_lb_target_group.msk_target_group.arn
-  target_id        = element(flatten([for broker in data.aws_msk_cluster.msk.broker_node_group_info: broker.client_subnet_ips]), count.index)
-  port             = 9092
-}
-3. msk.tf (MSK集群配置)
+修正后的 msk.tf
 hcl
 复制代码
 # 创建MSK集群
@@ -91,10 +40,12 @@ resource "aws_msk_cluster" "msk_cluster" {
   cluster_name           = "example-msk-cluster"
   kafka_version          = "2.8.0"
   number_of_broker_nodes = 3
+  
+  # broker_node_group_info 包含关于每个 broker 节点的信息
   broker_node_group_info {
     instance_type  = "kafka.m5.large"
     client_subnets = var.internal_subnet_ids
-    security_groups = [module.msk_internal_01_sg.security_group_id]
+    security_groups = [module.msk_security_group.security_group_id]  # 引用已创建的安全组ID
   }
 
   encryption_info {
@@ -120,87 +71,30 @@ auto.create.topics.enable = true
 delete.topic.enable = true
 EOF
 }
-4. security_group.tf (安全组配置)
+3. 更新后的 main.tf
 hcl
 复制代码
-# 为MSK设置安全组，允许从内部VPC访问
-module "msk_internal_01_sg" {
-  source  = "../../modules/shared_modules/security-group"
-  vpc_id  = var.internal_vpc_id
-
-  cidr_based_ingress = [
-    {
-      from_port = "9092"
-      to_port   = "9092"
-      protocol  = "tcp"
-      cidr_blocks = var.internal_nonnroutable_vpc_cidr_block
-    }
-  ]
-}
-5. secrets_manager.tf (Secrets Manager配置)
-hcl
-复制代码
-# 使用现有的KMS密钥创建用于存储MSK密码的Secrets Manager
-resource "aws_secretsmanager_secret" "msk_secret" {
-  name        = "msk_password"
-  description = "MSK cluster password"
-  
-  # 使用现有的KMS密钥进行加密
-  kms_key_id = var.existing_kms_key_id
+# 引入各个模块配置
+module "msk_nlb_proxy" {
+  source  = "./nlb.tf"
 }
 
-# 将密码存储到Secrets Manager中
-resource "aws_secretsmanager_secret_version" "msk_secret_value" {
-  secret_id     = aws_secretsmanager_secret.msk_secret.id
-  secret_string = var.msk_password
+module "msk_cluster" {
+  source  = "./msk.tf"
 }
-6. peering_routes.tf (VPC Peering路由配置)
-hcl
-复制代码
-# 为MSK和NLB之间的Peering连接设置路由
+
+module "msk_security_group" {
+  source  = "./security_group.tf"
+}
+
+module "msk_secrets_manager" {
+  source  = "./secrets_manager.tf"
+}
+
 module "vpc_peering_routes" {
-  source            = "../../modules/shared_modules/vpc-peering-routes"
-  source_vpc_id     = var.internal_vpc_id
-  destination_vpc_id = var.idmz_vpc_id
-  route_table_ids   = var.internal_route_table_ids
-
-  routes = [
-    {
-      destination_cidr_block = var.msk_vpc_cidr_block
-      target                 = var.peering_connection_id
-    },
-    {
-      destination_cidr_block = var.internal_nonnroutable_vpc_cidr_block
-      target                 = var.peering_connection_id
-    }
-  ]
+  source  = "./peering_routes.tf"
 }
-7. variables.tf (变量声明)
-hcl
-复制代码
-variable "internal_vpc_id" {}
-variable "internal_subnet_ids" {}
-variable "internal_nonnroutable_vpc_cidr_block" {}
-variable "msk_password" {}
-variable "existing_kms_key_id" {}
-variable "idmz_vpc_id" {}
-variable "internal_route_table_ids" {}
-variable "peering_connection_id" {}
-variable "msk_vpc_cidr_block" {}
-8. env_var/dev.tfvars (变量文件)
-hcl
-复制代码
-# MSK NLB配置变量
-internal_vpc_id        = "vpc-xxxxxxxx"
-internal_subnet_ids    = ["subnet-xxxxxx", "subnet-xxxxxx", "subnet-xxxxxx"] # MSK需要三个子网
-internal_nonnroutable_vpc_cidr_block = "10.0.0.0/16"
+说明
+security_group_id:
 
-# Secrets Manager配置变量
-msk_password           = "YourMSKPassword"
-existing_kms_key_id    = "arn:aws:kms:region:account-id:key/key-id"
-
-# VPC Peering路由配置变量
-idmz_vpc_id            = "vpc-yyyyyyyy"
-internal_route_table_ids = ["rtb-xxxxxx", "rtb-yyyyyy"]
-peering_connection_id   = "pcx-xxxxxxxx"
-msk_vpc_cidr_block     = "10.1.0.0/16"
+现在在 security_gro
