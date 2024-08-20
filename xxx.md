@@ -1,31 +1,89 @@
-1. nlb.tf (调整后的NLB配置)
+文件结构
+lua
+复制代码
+/msk-terraform
+  |-- main.tf
+  |-- nlb.tf
+  |-- msk.tf
+  |-- security_group.tf
+  |-- secrets_manager.tf
+  |-- peering_routes.tf
+  |-- variables.tf
+/env_var
+  |-- dev.tfvars
+1. main.tf (主文件)
+hcl
+复制代码
+# 引入各个模块配置
+module "msk_nlb_proxy" {
+  source  = "./nlb.tf"
+}
+
+module "msk_cluster" {
+  source  = "./msk.tf"
+}
+
+module "msk_security_group" {
+  source  = "./security_group.tf"
+}
+
+module "msk_secrets_manager" {
+  source  = "./secrets_manager.tf"
+}
+
+module "vpc_peering_routes" {
+  source  = "./peering_routes.tf"
+}
+2. nlb.tf (NLB配置)
 hcl
 复制代码
 # 创建MSK的NLB并配置目标组
-module "msk_nlb_proxy" {
-  source  = "../../modules/shared_modules/nlb"
-  
-  name_prefix = "msk-nlb"
-  vpc_id      = var.internal_vpc_id
-  subnet_ids  = var.internal_subnet_ids
+resource "aws_lb" "msk_nlb" {
+  name               = "msk-nlb"
+  load_balancer_type = "network"
+  internal           = true
+  security_groups    = [module.msk_internal_01_sg.security_group_id]
+  subnets            = var.internal_subnet_ids
+}
 
-  # 目标组映射配置，使用IP方式连接到MSK
-  target_mapping = [
-    {
-      from_port = "9092"
-      to_port   = "9092"
-      protocol  = "TCP"
-      ip_target = true
-      targets   = data.aws_msk_cluster.msk.broker_nodes[*].broker_node_info.client_subnet_ips
-    }
-  ]
+resource "aws_lb_target_group" "msk_target_group" {
+  name     = "msk-target-group"
+  port     = 9092
+  protocol = "TCP"
+  vpc_id   = var.internal_vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    interval            = 30
+    protocol            = "TCP"
+    port                = "9092"
+  }
+}
+
+resource "aws_lb_listener" "msk_listener" {
+  load_balancer_arn = aws_lb.msk_nlb.arn
+  port              = 9092
+  protocol          = "TCP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.msk_target_group.arn
+  }
 }
 
 # 获取MSK集群的节点IP地址
 data "aws_msk_cluster" "msk" {
   cluster_name = aws_msk_cluster.msk_cluster.cluster_name
 }
-2. msk.tf (MSK集群配置)
+
+# 配置NLB目标组的目标IP
+resource "aws_lb_target_group_attachment" "msk_targets" {
+  count            = length(data.aws_msk_cluster.msk.broker_node_group_info[0].client_subnet_ips)
+  target_group_arn = aws_lb_target_group.msk_target_group.arn
+  target_id        = element(flatten([for broker in data.aws_msk_cluster.msk.broker_node_group_info: broker.client_subnet_ips]), count.index)
+  port             = 9092
+}
+3. msk.tf (MSK集群配置)
 hcl
 复制代码
 # 创建MSK集群
@@ -62,7 +120,62 @@ auto.create.topics.enable = true
 delete.topic.enable = true
 EOF
 }
-3. variables.tf (修正后的变量声明)
+4. security_group.tf (安全组配置)
+hcl
+复制代码
+# 为MSK设置安全组，允许从内部VPC访问
+module "msk_internal_01_sg" {
+  source  = "../../modules/shared_modules/security-group"
+  vpc_id  = var.internal_vpc_id
+
+  cidr_based_ingress = [
+    {
+      from_port = "9092"
+      to_port   = "9092"
+      protocol  = "tcp"
+      cidr_blocks = var.internal_nonnroutable_vpc_cidr_block
+    }
+  ]
+}
+5. secrets_manager.tf (Secrets Manager配置)
+hcl
+复制代码
+# 使用现有的KMS密钥创建用于存储MSK密码的Secrets Manager
+resource "aws_secretsmanager_secret" "msk_secret" {
+  name        = "msk_password"
+  description = "MSK cluster password"
+  
+  # 使用现有的KMS密钥进行加密
+  kms_key_id = var.existing_kms_key_id
+}
+
+# 将密码存储到Secrets Manager中
+resource "aws_secretsmanager_secret_version" "msk_secret_value" {
+  secret_id     = aws_secretsmanager_secret.msk_secret.id
+  secret_string = var.msk_password
+}
+6. peering_routes.tf (VPC Peering路由配置)
+hcl
+复制代码
+# 为MSK和NLB之间的Peering连接设置路由
+module "vpc_peering_routes" {
+  source            = "../../modules/shared_modules/vpc-peering-routes"
+  source_vpc_id     = var.internal_vpc_id
+  destination_vpc_id = var.idmz_vpc_id
+  route_table_ids   = var.internal_route_table_ids
+
+  routes = [
+    {
+      destination_cidr_block = var.msk_vpc_cidr_block
+      target                 = var.peering_connection_id
+    },
+    {
+      destination_cidr_block = var.internal_nonnroutable_vpc_cidr_block
+      target                 = var.peering_connection_id
+    }
+  ]
+}
+7. variables.tf (变量声明)
 hcl
 复制代码
 variable "internal_vpc_id" {}
@@ -74,7 +187,7 @@ variable "idmz_vpc_id" {}
 variable "internal_route_table_ids" {}
 variable "peering_connection_id" {}
 variable "msk_vpc_cidr_block" {}
-4. dev.tfvars (变量文件)
+8. env_var/dev.tfvars (变量文件)
 hcl
 复制代码
 # MSK NLB配置变量
@@ -91,5 +204,3 @@ idmz_vpc_id            = "vpc-yyyyyyyy"
 internal_route_table_ids = ["rtb-xxxxxx", "rtb-yyyyyy"]
 peering_connection_id   = "pcx-xxxxxxxx"
 msk_vpc_cidr_block     = "10.1.0.0/16"
-说明
-MSK集群配置: 在 msk.tf 中创
