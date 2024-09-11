@@ -1,41 +1,16 @@
-
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.kafka.core.*;
-import org.springframework.kafka.test.context.EmbeddedKafka;
-import org.springframework.kafka.test.EmbeddedKafkaBroker;
-import org.springframework.kafka.test.utils.ContainerTestUtils;
-import org.springframework.kafka.test.utils.KafkaTestUtils;
-import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
-import org.springframework.kafka.listener.MessageListenerContainer;
-import org.springframework.kafka.listener.config.ContainerProperties;
-import org.springframework.test.context.TestPropertySource;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
-
 @SpringBootTest
-@EmbeddedKafka(partitions = 1, topics = { "test-topic" }, brokerProperties = {
-        "listeners=PLAINTEXT://localhost:9092", "port=9092"
-})
+@EmbeddedKafka(
+    partitions = 1,
+    topics = {"test-topic"},
+    brokerProperties = {
+        "listeners=PLAINTEXT://localhost:9092,PLAINTEXT://localhost:9093,PLAINTEXT://localhost:9094"
+    }
+)
 @TestPropertySource(properties = {
         "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}"
 })
 public class KafkaMqClientProviderTest {
+    // 测试类代码
 
     @Autowired
     private EmbeddedKafkaBroker embeddedKafka;
@@ -86,13 +61,6 @@ public class KafkaMqClientProviderTest {
             producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
             ProducerFactory<String, String> producerFactory = new DefaultKafkaProducerFactory<>(producerProps);
             return new KafkaTemplate<>(producerFactory);
-        }
-
-        @Bean
-        public EmbeddedKafkaBroker embeddedKafka() {
-            return new EmbeddedKafkaBroker(1, true, 1, "test-topic")
-                    .brokerProperty("listeners", "PLAINTEXT://localhost:9092")
-                    .brokerProperty("port", "9092");
         }
     }
 }
