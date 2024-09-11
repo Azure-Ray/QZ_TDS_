@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.*;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.kafka.test.EmbeddedKafkaBroker;
@@ -48,6 +49,7 @@ public class KafkaMqClientProviderTest {
     public void setUp() {
         records = new LinkedBlockingQueue<>();
 
+        // 设置消费者配置
         Map<String, Object> consumerProps = KafkaTestUtils.consumerProps("test-group", "true", embeddedKafka);
         DefaultKafkaConsumerFactory<String, String> consumerFactory = new DefaultKafkaConsumerFactory<>(consumerProps, new StringDeserializer(), new StringDeserializer());
         ContainerProperties containerProps = new ContainerProperties("test-topic");
@@ -73,13 +75,24 @@ public class KafkaMqClientProviderTest {
         assertThat(received.value()).isEqualTo(message);
     }
 
-    @Bean
-    public KafkaTemplate<String, String> kafkaTemplate() {
-        Map<String, Object> producerProps = new HashMap<>();
-        producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, embeddedKafka.getBrokersAsString());
-        producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        ProducerFactory<String, String> producerFactory = new DefaultKafkaProducerFactory<>(producerProps);
-        return new KafkaTemplate<>(producerFactory);
+    @Configuration
+    static class KafkaTestConfig {
+
+        @Bean
+        public KafkaTemplate<String, String> kafkaTemplate(EmbeddedKafkaBroker embeddedKafka) {
+            Map<String, Object> producerProps = new HashMap<>();
+            producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, embeddedKafka.getBrokersAsString());
+            producerProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+            producerProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+            ProducerFactory<String, String> producerFactory = new DefaultKafkaProducerFactory<>(producerProps);
+            return new KafkaTemplate<>(producerFactory);
+        }
+
+        @Bean
+        public EmbeddedKafkaBroker embeddedKafka() {
+            return new EmbeddedKafkaBroker(1, true, 1, "test-topic")
+                    .brokerProperty("listeners", "PLAINTEXT://localhost:9092")
+                    .brokerProperty("port", "9092");
+        }
     }
 }
