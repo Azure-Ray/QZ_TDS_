@@ -1,129 +1,74 @@
 
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.common.config.SaslConfigs;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
-import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.*;
-import org.springframework.kafka.listener.ConcurrentMessageListenerContainer;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.kafka.test.utils.KafkaTestUtils;
+import org.springframework.kafka.test.EmbeddedKafkaBroker;
+import org.springframework.kafka.test.utils.ContainerTestUtils;
 import org.springframework.kafka.listener.MessageListenerContainer;
 import org.springframework.kafka.listener.config.ContainerProperties;
+import org.springframework.kafka.test.context.EmbeddedKafka;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
-@Configuration
-public class KafkaMqClientProvider {
+import static org.assertj.core.api.Assertions.assertThat;
 
-    @Value("${kafka.bootstrap-servers}")
-    private String bootstrapServers;
+@SpringBootTest
+@EmbeddedKafka(partitions = 1, topics = { "test-topic" })
+public class KafkaMqClientProviderTest {
 
-    @Value("${kafka.topic}")
-    private String topic;
+    @Autowired
+    private KafkaTemplate<String, String> kafkaTemplate;
 
-    @Value("${kafka.username}")
-    private String username;
+    @Autowired
+    private EmbeddedKafkaBroker embeddedKafka;
 
-    @Value("${kafka.password}")
-    private String password;
+    private BlockingQueue<ConsumerRecord<String, String>> records;
 
-    @Value("${wng.stub.delay:500}")
-    private int responseDelayTime;
+    @BeforeEach
+    public void setUp() {
+        records = new LinkedBlockingQueue<>();
 
-    private Map<String, String> stubMap = new HashMap<>();
+        // Set up a consumer for testing
+        ContainerProperties containerProps = new ContainerProperties("test-topic");
+        containerProps.setGroupId("test-group");
+        containerProps.setMessageListener((org.springframework.kafka.listener.MessageListener<String, String>) record -> records.add(record));
 
-    @Bean
-    public ProducerFactory<String, String> producerFactory() {
-        Map<String, Object> configProps = new HashMap<>();
-        configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-        configProps.put("security.protocol", "SASL_SSL");
-        configProps.put(SaslConfigs.SASL_MECHANISM, "SCRAM-SHA-512");
-        configProps.put(SaslConfigs.SASL_JAAS_CONFIG,
-                "org.apache.kafka.common.security.scram.ScramLoginModule required username=\"" + username + "\" password=\"" + password + "\";");
-        return new DefaultKafkaProducerFactory<>(configProps);
+        MessageListenerContainer container = new ConcurrentMessageListenerContainer<>(
+                new DefaultKafkaConsumerFactory<>(
+                        KafkaTestUtils.consumerProps("test-group", "true", embeddedKafka),
+                        new StringDeserializer(),
+                        new StringDeserializer()
+                ),
+                containerProps
+        );
+
+        container.start();
+        ContainerTestUtils.waitForAssignment(container, embeddedKafka.getPartitionsPerTopic());
     }
 
-    @Bean
-    public KafkaTemplate<String, String> kafkaTemplate() {
-        return new KafkaTemplate<>(producerFactory());
-    }
+    @Test
+    public void testSendMessage() throws InterruptedException {
+        // Given
+        String message = "Hello, Kafka!";
+        String topic = "test-topic";
 
-    @Bean
-    public ConsumerFactory<String, String> consumerFactory() {
-        Map<String, Object> props = new HashMap<>();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "your-group-id");
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-        props.put("security.protocol", "SASL_SSL");
-        props.put(SaslConfigs.SASL_MECHANISM, "SCRAM-SHA-512");
-        props.put(SaslConfigs.SASL_JAAS_CONFIG,
-                "org.apache.kafka.common.security.scram.ScramLoginModule required username=\"" + username + "\" password=\"" + password + "\";");
-        return new DefaultKafkaConsumerFactory<>(props);
-    }
-
-    @Bean
-    public MessageListenerContainer messageListenerContainer() {
-        ContainerProperties containerProps = new ContainerProperties(topic);
-        containerProps.setMessageListener(new KafkaMessageListener());
-        return new ConcurrentMessageListenerContainer<>(consumerFactory(), containerProps);
-    }
-
-    public void sendMessage(String message) {
-        KafkaTemplate<String, String> kafkaTemplate = kafkaTemplate();
+        // When
         kafkaTemplate.send(topic, message);
-        if (responseDelayTime > 0) {
-            try {
-                Thread.sleep(responseDelayTime);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException(e);
-            }
-        }
-    }
 
-    @KafkaListener(topics = "${kafka.topic}", groupId = "your-group-id")
-    public void receiveMessage(String message) {
-        // Processing incoming Kafka messages
-        if (!stubMap.containsKey(message)) {
-            System.err.println("Stub request: " + message);
-            throw new RuntimeException("Stub data not found!");
-        } else {
-            String response = stubMap.get(message);
-            System.out.println("Received response: " + response);
-        }
-    }
-
-    private void loadStubData(String prefix) {
-        stubMap.put(getDataString("classpath:stub/" + prefix + "_request.txt"),
-                getDataString("classpath:stub/" + prefix + "_response.txt"));
-    }
-
-    private String getDataString(String resourcePath) {
-        try {
-            return IOUtils.toString(ResourceUtils.getURI(resourcePath), StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
-    static {
-        System.out.println("Stub Kafka Client Enabled!");
-    }
-}
-
-class KafkaMessageListener implements org.springframework.kafka.listener.MessageListener<String, String> {
-
-    @Override
-    public void onMessage(org.apache.kafka.clients.consumer.ConsumerRecord<String, String> record) {
-        System.out.println("Received Kafka message: " + record.value());
-        // Process the message
+        // Then
+        ConsumerRecord<String, String> received = records.poll(10, TimeUnit.SECONDS);
+        assertThat(received).isNotNull();
+        assertThat(received.value()).isEqualTo(message);
     }
 }
