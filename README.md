@@ -1,23 +1,14 @@
-package com.example.otherproject.controller;
-
-import com.example.kafka.KafkaProducerService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
-@RestController
-@RequestMapping("/api/messages")
-public class MessageController {
-
-    private final KafkaProducerService kafkaProducerService;
-
-    @Autowired
-    public MessageController(KafkaProducerService kafkaProducerService) {
-        this.kafkaProducerService = kafkaProducerService;
-    }
-
-    @PostMapping("/send")
-    public String sendMessage(@RequestParam String message) {
-        kafkaProducerService.sendMessage(message);
-        return "Message sent: " + message;
-    }
-}
+spring:
+  kafka:
+    bootstrap-servers: broker1:9093,broker2:9093,broker3:9093
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      group-id: my-group
+    properties:
+      security.protocol: SASL_SSL
+      sasl.mechanism: PLAIN
+      sasl.jaas.config: org.apache.kafka.common.security.plain.PlainLoginModule required username="your-username" password="your-password";
