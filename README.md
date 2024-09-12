@@ -1,8 +1,8 @@
-下面是一套基于JDK 8的简单Kafka Producer和Consumer代码示例，它可以打包成一个JAR文件供他人使用。Kafka的连接参数和安全配置都通过配置文件来控制，使其更加灵活。
+下面是基于Spring Boot的项目结构，提供REST API来启动Kafka的Producer和Consumer。这将使项目更易于测试，同时仍然可以被其他项目作为依赖使用。
 
-### 1. Maven 配置 (`pom.xml`)
+### 1. 更新 `pom.xml`
 
-首先，配置Maven的`pom.xml`文件，指定Kafka和Spring Kafka的版本：
+首先，`pom.xml`需要进行一些更新以支持Spring Boot项目和REST API功能：
 
 ```xml
 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -11,7 +11,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.example.kafka</groupId>
-    <artifactId>kafka-producer-consumer</artifactId>
+    <artifactId>kafka-api</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <properties>
@@ -21,6 +21,13 @@
     </properties>
 
     <dependencies>
+        <!-- Spring Boot Starter Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <version>2.5.12</version>
+        </dependency>
+
         <!-- Spring Kafka -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>
@@ -33,13 +40,6 @@
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
             <version>${kafka.clients.version}</version>
-        </dependency>
-
-        <!-- Spring Boot Starter -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
-            <version>2.5.12</version>
         </dependency>
     </dependencies>
 
@@ -68,7 +68,7 @@
 
 ### 2. 配置文件 (`application.properties`)
 
-创建一个`src/main/resources/application.properties`文件，用于配置Kafka的参数。
+继续使用配置文件来管理Kafka的连接和安全设置。创建或更新`src/main/resources/application.properties`文件：
 
 ```properties
 # Kafka Producer 配置
@@ -87,9 +87,11 @@ spring.kafka.properties.sasl.mechanism=PLAIN
 spring.kafka.properties.sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="your-username" password="your-password";
 ```
 
-### 3. 生产者代码 (`KafkaProducerService.java`)
+### 3. 生产者和消费者服务类
 
-编写一个简单的Kafka Producer类，用于发送消息：
+创建Kafka生产者和消费者服务类，它们将提供API来发送和接收消息。
+
+#### 生产者服务 (`KafkaProducerService.java`)
 
 ```java
 package com.example.kafka;
@@ -117,9 +119,7 @@ public class KafkaProducerService {
 }
 ```
 
-### 4. 消费者代码 (`KafkaConsumerService.java`)
-
-编写一个简单的Kafka Consumer类，用于接收消息：
+#### 消费者服务 (`KafkaConsumerService.java`)
 
 ```java
 package com.example.kafka;
@@ -137,6 +137,41 @@ public class KafkaConsumerService {
 }
 ```
 
+### 4. REST 控制器 (`KafkaController.java`)
+
+创建一个REST控制器来提供API端点，允许用户通过API启动Kafka Producer和Consumer。
+
+```java
+package com.example.kafka;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/kafka")
+public class KafkaController {
+
+    private final KafkaProducerService producerService;
+
+    @Autowired
+    public KafkaController(KafkaProducerService producerService) {
+        this.producerService = producerService;
+    }
+
+    @PostMapping("/send")
+    public String sendMessage(@RequestParam("message") String message) {
+        producerService.sendMessage(message);
+        return "Message sent successfully!";
+    }
+
+    @GetMapping("/receive")
+    public String receiveMessage() {
+        // 实际上Consumer是自动监听的，这里仅用作示例
+        return "Messages are being consumed automatically!";
+    }
+}
+```
+
 ### 5. 主应用程序类 (`KafkaApplication.java`)
 
 编写主应用程序类来启动Spring Boot应用：
@@ -144,24 +179,14 @@ public class KafkaConsumerService {
 ```java
 package com.example.kafka;
 
-import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
 public class KafkaApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(KafkaApplication.class, args);
-    }
-
-    @Bean
-    public CommandLineRunner commandLineRunner(KafkaProducerService producerService) {
-        return args -> {
-            // 发送测试消息
-            producerService.sendMessage("Hello, Kafka!");
-        };
     }
 }
 ```
@@ -177,11 +202,32 @@ mvn clean package
 生成的JAR文件会位于`target`目录中，可以通过以下命令运行：
 
 ```bash
-java -jar target/kafka-producer-consumer-1.0-SNAPSHOT.jar
+java -jar target/kafka-api-1.0-SNAPSHOT.jar
 ```
 
-### 7. 配置示例
+### 7. 测试API
 
-确保在运行时提供正确的Kafka配置和凭据，特别是`sasl.jaas.config`部分需要根据实际环境进行修改。
+启动Spring Boot应用后，可以通过以下API端点测试Producer和Consumer：
 
-这套代码和配置应该能够满足你的要求，并允许其他人直接调用，配置Kafka参数时更加灵活。
+- **发送消息**（POST请求）：
+  ```bash
+  curl -X POST "http://localhost:8080/api/kafka/send?message=HelloKafka"
+  ```
+- **接收消息**（GET请求）：
+  ```bash
+  curl -X GET "http://localhost:8080/api/kafka/receive"
+  ```
+
+### 8. 用作依赖
+
+将这个项目打包成JAR文件后，可以在其他项目的`pom.xml`中添加这个JAR文件作为依赖：
+
+```xml
+<dependency>
+    <groupId>com.example.kafka</groupId>
+    <artifactId>kafka-api</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+```
+
+这样，您就可以在其他项目中复用此Kafka Producer和Consumer的功能，同时也可以通过API端点进行测试。
