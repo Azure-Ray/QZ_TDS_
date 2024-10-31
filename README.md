@@ -1,13 +1,14 @@
 package com.example.awsdbtoken;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
-import com.amazonaws.services.rds.auth.RdsIamAuthTokenGenerator;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
-import com.amazonaws.services.securitytoken.model.AssumeRoleRequest;
-import com.amazonaws.services.securitytoken.model.AssumeRoleResult;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AssumeRoleRequest;
+import software.amazon.awssdk.auth.credentials.StsAssumeRoleCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.rds.RdsUtilities;
+import software.amazon.awssdk.services.rds.model.GenerateAuthenticationTokenRequest;
+import software.amazon.awssdk.services.sts.StsClient;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,35 +17,39 @@ public class AwsDbAuthTokenController {
 
     @PostMapping("/generateToken")
     public String generateDbAuthToken(@RequestBody TokenRequest tokenRequest) {
-        // Step 1: 使用用户传入的Access Key和Secret Key登录AWS
-        BasicAWSCredentials awsCreds = new BasicAWSCredentials(tokenRequest.getAccessKey(), tokenRequest.getSecretKey());
-        AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.standard()
-                .withRegion(tokenRequest.getRegion())
-                .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
+        // Step 1: 使用提供的 AWS Access Key 和 Secret Key 登录
+        AwsCredentialsProvider staticProvider = StaticCredentialsProvider.create(
+                AwsBasicCredentials.create(tokenRequest.getAccessKey(), tokenRequest.getSecretKey())
+        );
+
+        StsClient stsClient = StsClient.builder()
+                .region(Region.of(tokenRequest.getRegion()))
+                .credentialsProvider(staticProvider)
                 .build();
 
-        // Step 2: Assume到指定的RDS IAM Role
-        AssumeRoleRequest assumeRoleRequest = new AssumeRoleRequest()
-                .withRoleArn(tokenRequest.getAssumeRoleArn())
-                .withRoleSessionName("session" + System.currentTimeMillis());
-
-        AssumeRoleResult assumeRoleResult = stsClient.assumeRole(assumeRoleRequest);
-        
-        // Step 3: 获取Assume Role的临时凭证
-        STSAssumeRoleSessionCredentialsProvider credentialsProvider = new STSAssumeRoleSessionCredentialsProvider
-                .Builder(tokenRequest.getAssumeRoleArn(), "session" + System.currentTimeMillis())
-                .withStsClient(stsClient)
+        // Step 2: Assume到指定的 RDS IAM Role
+        AssumeRoleRequest assumeRoleRequest = AssumeRoleRequest.builder()
+                .roleArn(tokenRequest.getAssumeRoleArn())
+                .roleSessionName("session" + System.currentTimeMillis())
                 .build();
 
-        // Step 4: 使用临时凭证生成RDS认证Token
-        RdsIamAuthTokenGenerator tokenGenerator = RdsIamAuthTokenGenerator.builder()
-                .credentials(credentialsProvider)
-                .region(tokenRequest.getRegion())
+        StsAssumeRoleCredentialsProvider credentialsProvider = StsAssumeRoleCredentialsProvider.builder()
+                .stsClient(stsClient)
+                .refreshRequest(assumeRoleRequest)
                 .build();
 
-        // 使用直接生成的Token请求参数
-        String authToken = tokenGenerator.getAuthToken(
-                tokenRequest.getHostname(), 3306, tokenRequest.getUsername()
+        // Step 3: 使用 Assume Role 后的临时凭证生成 RDS 认证 Token
+        RdsUtilities rdsUtilities = RdsUtilities.builder()
+                .region(Region.of(tokenRequest.getRegion()))
+                .credentialsProvider(credentialsProvider)
+                .build();
+
+        String authToken = rdsUtilities.generateAuthenticationToken(
+                GenerateAuthenticationTokenRequest.builder()
+                        .hostname(tokenRequest.getHostname())
+                        .port(3306) // 替换为实际端口
+                        .username(tokenRequest.getUsername())
+                        .build()
         );
 
         return authToken;
@@ -79,3 +84,24 @@ class TokenRequest {
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
 }
+
+
+<dependencies>
+    <!-- AWS SDK v2 Core -->
+    <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>sts</artifactId>
+        <version>2.20.15</version> <!-- 使用最新的 v2 版本 -->
+    </dependency>
+    <dependency>
+        <groupId>software.amazon.awssdk</groupId>
+        <artifactId>rds</artifactId>
+        <version>2.20.15</version>
+    </dependency>
+
+    <!-- Spring Boot Starter Web -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+</dependencies>
