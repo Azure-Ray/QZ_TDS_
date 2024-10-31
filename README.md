@@ -1,80 +1,86 @@
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.Acknowledgment;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.handler.annotation.Header;
-import org.springframework.messaging.support.MessageBuilder;
-import org.springframework.stereotype.Service;
+package com.example.awsdbtoken;
 
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.services.rds.auth.RdsIamAuthTokenGenerator;
+import com.amazonaws.services.rds.auth.RdsIamAuthTokenRequest;
+import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
+import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
+import com.amazonaws.services.securitytoken.model.AssumeRoleRequest;
+import com.amazonaws.services.securitytoken.model.AssumeRoleResult;
+import org.springframework.web.bind.annotation.*;
 
-@Service
-public class KafkaConsumerService {
+@RestController
+@RequestMapping("/api/v1/aws")
+public class AwsDbAuthTokenController {
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
-
-    // 用于存储每个请求的响应队列
-    private final Map<String, BlockingQueue<String>> responseMap = new ConcurrentHashMap<>();
-
-    @Value("${spring.kafka.producer.topic:default-topic}")
-    private String requestTopic;
-
-    private static final String TOPIC_BILLER_QRY_RESPONSE = "msk_response_a_test_3";
-
-    public KafkaConsumerService(KafkaTemplate<String, String> kafkaTemplate) {
-        this.kafkaTemplate = kafkaTemplate;
-    }
-
-    @KafkaListener(id = "response-listener", topics = TOPIC_BILLER_QRY_RESPONSE,
-            groupId = "${spring.kafka.consumer.group-id:msk_request_9}",
-            containerFactory = "kafkaListenerContainerFactory")
-    public void readMessage(String message, @Header(KafkaHeaders.CORRELATION_ID) String correlationId, Acknowledgment acknowledgment) {
-        acknowledgment.acknowledge();
-        System.out.println("Received message: " + message + " for Correlation ID: " + correlationId);
-
-        // 查找对应的请求的 BlockingQueue，并将消息放入队列
-        BlockingQueue<String> queue = responseMap.get(correlationId);
-        if (queue != null) {
-            queue.offer(message);  // 将响应消息放入队列中
-        }
-    }
-
-    public String sendAndReceive(String message) throws InterruptedException {
-        String correlationId = createCorrelationId();
-
-        // 为每个请求创建一个阻塞队列来等待响应
-        BlockingQueue<String> responseQueue = new LinkedBlockingQueue<>();
-        responseMap.put(correlationId, responseQueue);
-
-        Message<String> messageToSend = MessageBuilder.withPayload(message)
-                .setHeader(KafkaHeaders.TOPIC, requestTopic)
-                .setHeader(KafkaHeaders.CORRELATION_ID, correlationId)
+    @PostMapping("/generateToken")
+    public String generateDbAuthToken(@RequestBody TokenRequest tokenRequest) {
+        // Step 1: 使用用户传入的Access Key和Secret Key登录AWS
+        BasicAWSCredentials awsCreds = new BasicAWSCredentials(tokenRequest.getAccessKey(), tokenRequest.getSecretKey());
+        AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.standard()
+                .withRegion(tokenRequest.getRegion())
+                .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
                 .build();
 
-        // 同步发送消息
-        kafkaTemplate.send(messageToSend);
+        // Step 2: Assume到指定的RDS IAM Role
+        AssumeRoleRequest assumeRoleRequest = new AssumeRoleRequest()
+                .withRoleArn(tokenRequest.getAssumeRoleArn())
+                .withRoleSessionName("session" + System.currentTimeMillis());
 
-        try {
-            // 等待最多 30 秒，直到有响应进入队列
-            String response = responseQueue.poll(30, TimeUnit.SECONDS);
-            if (response == null) {
-                throw new RuntimeException("Timeout waiting for response with correlationId: " + correlationId);
-            }
-            return response;
-        } finally {
-            // 请求完成后，清理对应的阻塞队列
-            responseMap.remove(correlationId);
-        }
-    }
+        AssumeRoleResult assumeRoleResult = stsClient.assumeRole(assumeRoleRequest);
+        
+        // Step 3: 获取Assume Role的临时凭证
+        STSAssumeRoleSessionCredentialsProvider credentialsProvider = new STSAssumeRoleSessionCredentialsProvider
+                .Builder(tokenRequest.getAssumeRoleArn(), "session" + System.currentTimeMillis())
+                .withStsClient(stsClient)
+                .build();
 
-    public String createCorrelationId() {
-        return UUID.randomUUID().toString();
+        // Step 4: 使用临时凭证生成RDS认证Token
+        RdsIamAuthTokenGenerator tokenGenerator = RdsIamAuthTokenGenerator.builder()
+                .credentials(new AWSStaticCredentialsProvider(assumeRoleResult.getCredentials()))
+                .region(tokenRequest.getRegion())
+                .build();
+
+        String authToken = tokenGenerator.getAuthToken(
+                RdsIamAuthTokenRequest.builder()
+                        .hostname(tokenRequest.getHostname())
+                        .port(3306) // 或者其他端口
+                        .username(tokenRequest.getUsername())
+                        .build()
+        );
+
+        return authToken;
     }
+}
+
+// 定义请求体模型
+class TokenRequest {
+    private String accessKey;
+    private String secretKey;
+    private String region;
+    private String assumeRoleArn;
+    private String hostname;
+    private String username;
+
+    // Getters and Setters
+    public String getAccessKey() { return accessKey; }
+    public void setAccessKey(String accessKey) { this.accessKey = accessKey; }
+
+    public String getSecretKey() { return secretKey; }
+    public void setSecretKey(String secretKey) { this.secretKey = secretKey; }
+
+    public String getRegion() { return region; }
+    public void setRegion(String region) { this.region = region; }
+
+    public String getAssumeRoleArn() { return assumeRoleArn; }
+    public void setAssumeRoleArn(String assumeRoleArn) { this.assumeRoleArn = assumeRoleArn; }
+
+    public String getHostname() { return hostname; }
+    public void setHostname(String hostname) { this.hostname = hostname; }
+
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
 }
